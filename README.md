@@ -96,9 +96,9 @@ backend/src/
 ```
 
 import-linter enforces the layer rules (`backend/pyproject.toml`). The frontend's
-module rules live in `frontend/.dependency-cruiser.cjs`. See `CLAUDE.md` for the
-full rules, `docs/agents/domain-modules.md` for adding a module, and
-`docs/adr/` for the decisions behind them.
+module rules live in `frontend/.dependency-cruiser.cjs`. See `AGENTS.md` for links
+to the full rules in `.agents/docs/`, `.agents/docs/domain-modules.md` for adding a
+module, and `.agents/docs/adr/` for the decisions behind them.
 
 ## Quality tooling
 

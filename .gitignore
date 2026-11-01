@@ -38,3 +38,6 @@ jscpd-report/
 backend/data/
 backend/uploads/
 backend/config/payee-account-rules.json
+
+# Agent scratch space: local issue/scratch files
+.agents/scratch/

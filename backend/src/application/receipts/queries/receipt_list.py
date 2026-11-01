@@ -2,7 +2,7 @@
 
 These are view DTOs, not domain entities: they exist to be rendered and must
 never be fed back into a command (the `queries-are-dead-ends` import contract
-enforces that). See `docs/adr/0001-read-models-and-query-services.md`.
+enforces that). See `.agents/docs/adr/0001-read-models-and-query-services.md`.
 """
 
 from dataclasses import dataclass

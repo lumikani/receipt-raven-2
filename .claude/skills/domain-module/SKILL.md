@@ -5,7 +5,7 @@ description: Recipe for adding a backend domain module (aggregate, use cases, re
 
 # Adding a domain module
 
-Follow `docs/agents/domain-modules.md` step by step. The `notes` module is the
+Follow `.agents/docs/domain-modules.md` step by step. The `notes` module is the
 reference implementation: mirror its file layout and naming.
 
 Before finishing:
