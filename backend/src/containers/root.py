@@ -44,6 +44,7 @@ class RootContainer(containers.DeclarativeContainer):
         receipt_list_query=shared.receipt_list_query,
         ledger_service=shared.ledger_service,
         receipt_classifier=classification.receipt_classifier,
+        account_roles=shared.account_roles,
     )
     analysis = providers.Container(
         AnalysisContainer,

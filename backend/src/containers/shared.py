@@ -12,6 +12,7 @@ from src.infrastructure.jobs.queries.job_list_query import JobListQuery
 from src.infrastructure.jobs.repositories.receipt_job_repository import ReceiptJobRepository
 from src.infrastructure.jobs.storage.local_document_storage import LocalDocumentStorage
 from src.infrastructure.jobs.storage.uploads_cleanup import UploadsCleanup
+from src.infrastructure.ledger.account_roles_file import AccountRolesFile
 from src.infrastructure.ledger.ledger_service_factory import build_ledger_service
 from src.infrastructure.receipts.queries.receipt_list_query import ReceiptListQuery
 from src.infrastructure.receipts.repositories.receipt_repository import ReceiptRepository
@@ -51,3 +52,4 @@ class SharedContainer(containers.DeclarativeContainer):
     payee_account_rules = providers.Singleton(
         PayeeAccountRulesFile, path=settings.provided.PAYEE_ACCOUNT_RULES_PATH
     )
+    account_roles = providers.Singleton(AccountRolesFile, path=settings.provided.ACCOUNT_ROLES_PATH)

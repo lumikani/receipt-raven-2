@@ -18,6 +18,7 @@ os.environ["AI_PROVIDER"] = "mock"
 os.environ["AI_MOCK_DELAY_SECONDS"] = "0"
 os.environ["UPLOADS_DIR"] = tempfile.mkdtemp(prefix="receipt-raven-uploads-")
 os.environ["PAYEE_ACCOUNT_RULES_PATH"] = "/nonexistent/payee-account-rules.json"
+os.environ["ACCOUNT_ROLES_PATH"] = "/nonexistent/account-roles.json"
 
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from pathlib import Path

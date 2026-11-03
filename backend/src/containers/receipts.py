@@ -18,6 +18,7 @@ class ReceiptsContainer(containers.DeclarativeContainer):
     receipt_list_query = providers.Dependency()
     ledger_service = providers.Dependency()
     receipt_classifier = providers.Dependency()
+    account_roles = providers.Dependency()
 
     list_receipts_use_case = providers.Factory(
         ListReceiptsUseCase, receipt_list_query=receipt_list_query
