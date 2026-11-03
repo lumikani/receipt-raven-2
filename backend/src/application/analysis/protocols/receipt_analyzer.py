@@ -32,6 +32,9 @@ class ReceiptAnalysis:
     total: float
     model: str
     currency: str = "EUR"
+    # Card last digits read from the receipt (e.g. from a Finnish `Kortti:`
+    # line). Only the local OCR parser sets it; cloud providers leave it None.
+    card_last_digits: str | None = None
 
 
 class ReceiptAnalyzerProtocol(Protocol):

@@ -1,0 +1,12 @@
+![title](110,38,850,92) S-Market
+![text](100,105,900,145) Aleksanterinkatu 21, 00170 Helsinki
+![text](100,155,900,195) 2026-11-01 18:45
+![table](100,210,900,620)
+<table>
+<tr><th>Tuote</th><th>Määrä</th><th>Yks. hinta</th><th>Yhteensä</th></tr>
+<tr><td>Omenamehu 1 l</td><td>2 kpl</td><td>2,50 €</td><td>5,00 €</td></tr>
+<tr><td>Kurkku</td><td>0,412 kg</td><td>2,39 €/kg</td><td>0,99 €</td></tr>
+<tr><td>Leipä 400 g</td><td>1 kpl</td><td></td><td>2,49 €</td></tr>
+<tr><td>Banaani</td><td>1,20 €/kg</td></tr>
+</table>
+![text](100,640,900,700) YHTEENSÄ 8,48 €
