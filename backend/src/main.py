@@ -38,6 +38,9 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Start the database and the background tasks; stop them on shutdown."""
     initialize_database(settings)
+    # Resolve the ledger service once so a misconfigured LEDGER_PROVIDER (for
+    # example hledger without HLEDGER_FILE) fails at startup, not on first use.
+    container.shared.ledger_service()
     tasks = [
         asyncio.create_task(
             run_cleanup_schedule(
@@ -57,6 +60,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         environment=settings.ENVIRONMENT,
         version=settings.VERSION,
         ai_provider=settings.AI_PROVIDER,
+        ledger_provider=settings.LEDGER_PROVIDER,
     )
     yield
     for task in tasks:

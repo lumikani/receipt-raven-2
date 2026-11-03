@@ -12,7 +12,7 @@ from src.infrastructure.jobs.queries.job_list_query import JobListQuery
 from src.infrastructure.jobs.repositories.receipt_job_repository import ReceiptJobRepository
 from src.infrastructure.jobs.storage.local_document_storage import LocalDocumentStorage
 from src.infrastructure.jobs.storage.uploads_cleanup import UploadsCleanup
-from src.infrastructure.ledger.beancount_ledger_service import BeancountLedgerService
+from src.infrastructure.ledger.ledger_service_factory import build_ledger_service
 from src.infrastructure.receipts.queries.receipt_list_query import ReceiptListQuery
 from src.infrastructure.receipts.repositories.receipt_repository import ReceiptRepository
 
@@ -46,11 +46,7 @@ class SharedContainer(containers.DeclarativeContainer):
         directory=settings.provided.UPLOADS_DIR,
         max_disk_size=settings.provided.MAX_UPLOADS_DISK_SIZE,
     )
-    ledger_service = providers.Singleton(
-        BeancountLedgerService,
-        base_url=settings.provided.BEANCOUNT_SERVICE_URL,
-        timeout_seconds=settings.provided.BEANCOUNT_TIMEOUT_SECONDS,
-    )
+    ledger_service = providers.Singleton(build_ledger_service, settings=settings)
     receipt_analyzer = providers.Singleton(build_receipt_analyzer, settings=settings)
     payee_account_rules = providers.Singleton(
         PayeeAccountRulesFile, path=settings.provided.PAYEE_ACCOUNT_RULES_PATH
