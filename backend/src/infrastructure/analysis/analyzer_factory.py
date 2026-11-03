@@ -9,7 +9,7 @@ from src.infrastructure.analysis.openai_compatible_analyzer import (
 
 
 def build_receipt_analyzer(settings: Settings) -> ReceiptAnalyzerProtocol:
-    """`AI_PROVIDER`: openrouter (default), openai or mock."""
+    """`AI_PROVIDER`: openrouter (default), openai, mock or local."""
     match settings.AI_PROVIDER:
         case "openrouter":
             return OpenAICompatibleReceiptAnalyzer(
@@ -29,3 +29,12 @@ def build_receipt_analyzer(settings: Settings) -> ReceiptAnalyzerProtocol:
             )
         case "mock":
             return MockReceiptAnalyzer(delay_seconds=settings.AI_MOCK_DELAY_SECONDS)
+        case "local":
+            # LocalOCRAnalyzer (infrastructure/analysis/local_ocr/) lands with
+            # its implementation; until then fail loudly instead of falling
+            # back to a cloud provider.
+            raise NotImplementedError(
+                "AI_PROVIDER=local requires the local OCR analyzer "
+                "(infrastructure/analysis/local_ocr/), which is not part of "
+                "this build; use openrouter, openai or mock."
+            )

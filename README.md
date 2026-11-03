@@ -45,6 +45,33 @@ To read real receipts, set `AI_PROVIDER=openrouter` and `OPENROUTER_API_KEY` in
 `.env`. If port 8000 is taken, run the backend elsewhere and start the frontend
 with `API_PROXY_TARGET=http://localhost:<port>`.
 
+## Local OCR + hledger setup (run on the host)
+
+A personal-finance setup that runs everything locally on the host — no Docker,
+no cloud AI. Requirements: [ollama](https://ollama.com) with the OCR model
+pulled (`ollama pull richardyoung/lightonocr-3-4b:Q4_K_M`) listening on
+`localhost:11434`, and the `hledger` CLI installed.
+
+```bash
+cp .env.example .env        # then edit .env:
+#   AI_PROVIDER=local
+#   LOCAL_BASE_URL=http://localhost:11434/v1
+#   LOCAL_MODEL=richardyoung/lightonocr-3-4b:Q4_K_M
+#   LEDGER_PROVIDER=hledger
+#   HLEDGER_FILE=~/.ledger/current.journal        # reads + validation
+#   HLEDGER_APPEND_FILE=~/.ledger/receipts.journal  # app-owned append target,
+#                                                   # included from the main journal
+cp backend/config/account-roles.example.json backend/config/account-roles.json
+make migrate
+make dev-app        # backend on http://localhost:8000
+make dev-frontend   # frontend on http://localhost:5173
+```
+
+With `AI_PROVIDER=local` only image photos are supported (JPEG/PNG) — upload a
+PDF and the analysis fails with a clear message; cloud providers keep PDF
+support. The beancount backend stays available behind the switch:
+`LEDGER_PROVIDER=beancount` (default) plus `make dev-ledger`.
+
 ## Running in production
 
 ```bash

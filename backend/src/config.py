@@ -70,13 +70,16 @@ class Settings(BaseSettings):
     CLEANUP_INTERVAL_HOURS: float = 24
 
     # Receipt analysis
-    AI_PROVIDER: Literal["openrouter", "openai", "mock"] = "openrouter"
+    AI_PROVIDER: Literal["openrouter", "openai", "mock", "local"] = "openrouter"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "anthropic/claude-haiku-4.5"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    # Local OCR provider: an ollama-compatible /v1 endpoint on the host
+    LOCAL_BASE_URL: str = "http://localhost:11434/v1"
+    LOCAL_MODEL: str = "richardyoung/lightonocr-3-4b:Q4_K_M"
     AI_TIMEOUT_SECONDS: float = 120
     # How long the mock provider pretends to think.
     AI_MOCK_DELAY_SECONDS: float = 3
@@ -86,10 +89,24 @@ class Settings(BaseSettings):
     # Source account for analysed receipts no payee rule matches.
     DEFAULT_SOURCE_ACCOUNT: str | None = None
     PAYEE_ACCOUNT_RULES_PATH: Path = Path("./config/payee-account-rules.json")
+    # Expense account for receipt items no classification rule matches.
+    DEFAULT_UNALLOCATED_ACCOUNT: str = "expenses:unallocated"
+    # Source-account roles (personal cards vs shared card) for ledger/CSV
+    # routing; copy config/account-roles.example.json and edit.
+    ACCOUNT_ROLES_PATH: Path = Path("./config/account-roles.json")
 
-    # Ledger
+    # Ledger: `beancount` (the beancount service over HTTP) or `hledger`
+    # (a journal file plus the hledger CLI, no service process).
+    LEDGER_PROVIDER: Literal["beancount", "hledger"] = "beancount"
     BEANCOUNT_SERVICE_URL: str = "http://localhost:8100"
     BEANCOUNT_TIMEOUT_SECONDS: float = 10
+    # hledger backend. HLEDGER_FILE (reads + validation) has no default: the
+    # ledger factory fails fast at startup when LEDGER_PROVIDER=hledger and it
+    # is unset. HLEDGER_APPEND_FILE defaults to HLEDGER_FILE (single-file mode).
+    HLEDGER_FILE: Path | None = None
+    HLEDGER_APPEND_FILE: Path | None = None
+    HLEDGER_BINARY: str = "hledger"
+    HLEDGER_TIMEOUT_SECONDS: float = 10
 
 
 @lru_cache

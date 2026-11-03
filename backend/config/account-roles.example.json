@@ -1,0 +1,9 @@
+{
+  "personalCards": [
+    "liabilities:op:credit-card:gold",
+    "liabilities:op:credit-card:duo"
+  ],
+  "sharedCard": "liabilities:personal:shared-account",
+  "flatmateExpenseAdjustment": "expenses:flatmate-expense-adjustment",
+  "purchaseForFlatmate": "expenses:purchase-for-flatmate"
+}
