@@ -118,4 +118,6 @@ overlap lines the current turn changed.
 
 - Do not redesign the architecture or create broader plans unless asked.
 - On bigger tasks, make small, logically separated commits.
+- Write commit messages in imperative mood, keep them to preferably less than 60 characters, 80 at most.
+- Commit messages should be free of references to wayfinder tickets.
 - The pre-commit hook (husky + lint-staged) formats and lints staged files.
