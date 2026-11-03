@@ -103,6 +103,18 @@
   input[type='date']::-webkit-date-and-time-value {
     text-align: left;
   }
+  /* Native spinner arrows render unstyled next to the shadcn styling and are
+     never used — the wheel steps the value only when the input is focused
+     (see NumberInput) — so hide them on every number input. */
+  input[type='number'] {
+    -webkit-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: 'tnum' 1;

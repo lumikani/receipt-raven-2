@@ -100,7 +100,7 @@
       }
     },
     {
-      "files": ["src/hooks/**/*.test.tsx"],
+      "files": ["src/components/common/**/*.test.tsx", "src/hooks/**/*.test.tsx"],
       "rules": {
         "no-restricted-imports": [
           "error",
