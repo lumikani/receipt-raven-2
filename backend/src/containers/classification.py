@@ -1,5 +1,6 @@
 from dependency_injector import containers, providers
 
+from src.application.classification.classifier import ReceiptClassifier
 from src.application.classification.commands.create_rule_use_case import CreateRuleUseCase
 from src.application.classification.commands.delete_account_share_default_use_case import (
     DeleteAccountShareDefaultUseCase,
@@ -23,6 +24,14 @@ class ClassificationContainer(containers.DeclarativeContainer):
     classification_rule_repository = providers.Dependency()
     account_share_default_repository = providers.Dependency()
     ledger_service = providers.Dependency()
+    settings = providers.Dependency()
+
+    receipt_classifier = providers.Factory(
+        ReceiptClassifier,
+        rule_repository=classification_rule_repository,
+        share_default_repository=account_share_default_repository,
+        unallocated_account=settings.provided.DEFAULT_UNALLOCATED_ACCOUNT,
+    )
 
     list_rules_use_case = providers.Factory(
         ListRulesUseCase, rule_repository=classification_rule_repository

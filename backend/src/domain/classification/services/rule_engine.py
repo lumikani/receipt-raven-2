@@ -103,11 +103,24 @@ def _result_for_match(
     )
 
 
+def _unmatched_result(
+    account: str, share_defaults: dict[str, float], flagged: bool
+) -> ClassificationResult:
+    """The verdict when no rule matched: `account` with its share default."""
+    return ClassificationResult(
+        expense_account=account,
+        flatmate_share=share_defaults.get(account, 0.0),
+        matched_rule_id=None,
+        flagged=flagged,
+    )
+
+
 def classify_item(
     item_name: str,
     rules: list[ClassificationRule],
     share_defaults: dict[str, float],
     unallocated_account: str,
+    fallback_account: str | None = None,
 ) -> ClassificationResult:
     """Classify one receipt item name against the enabled rules.
 
@@ -116,6 +129,12 @@ def classify_item(
         rules: Every stored rule; disabled ones never match.
         share_defaults: Expense account → default flatmate share (0-100).
         unallocated_account: Account for items no rule matches.
+        fallback_account: The account the analyzer or the user already chose. A
+            matching rule always beats it; when no rule matches, a non-empty
+            fallback is kept (flagged when its account has no share default).
+            None (the local parser emits an empty account) means the rule
+            engine alone assigns: unmatched items land on the unallocated
+            account, flagged.
     """
     normalized = normalize_name(item_name)
     enabled = [rule for rule in rules if rule.enabled]
@@ -143,10 +162,7 @@ def classify_item(
         if fuzzy:
             rule = min(fuzzy, key=lambda hit: hit.order_key).rule
             return _result_for_match(rule, share_defaults)
-    share = share_defaults.get(unallocated_account, 0.0)
-    return ClassificationResult(
-        expense_account=unallocated_account,
-        flatmate_share=share,
-        matched_rule_id=None,
-        flagged=True,
-    )
+    fallback = (fallback_account or "").strip()
+    if fallback:
+        return _unmatched_result(fallback, share_defaults, flagged=fallback not in share_defaults)
+    return _unmatched_result(unallocated_account, share_defaults, flagged=True)

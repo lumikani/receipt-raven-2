@@ -51,6 +51,7 @@ class FakeLedger:
 
 
 def analysis(
+    *,
     payee: str = "K-Market",
     receipt_date: date | None = None,
     products: tuple[tuple[str, str, float], ...] = (
@@ -59,6 +60,7 @@ def analysis(
     ),
     total: float = 15.79,
     currency: str = "EUR",
+    card_last_digits: str | None = None,
 ) -> ReceiptAnalysis:
     return ReceiptAnalysis(
         payee=payee,
@@ -68,6 +70,7 @@ def analysis(
         total=total,
         model="fake-model",
         currency=currency,
+        card_last_digits=card_last_digits,
     )
 
 

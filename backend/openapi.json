@@ -147,6 +147,48 @@
         }
       }
     },
+    "/api/v1/receipts/reclassify-all-unapproved": {
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Reclassify All Unapproved",
+        "description": "Re-run the classification rules on every unapproved receipt.",
+        "operationId": "reclassify_all_unapproved",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReclassifyAllResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The receipt breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/receipts/{receipt_id}": {
       "get": {
         "tags": [
@@ -324,6 +366,69 @@
           },
           "502": {
             "description": "The ledger is down or rejected it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/{receipt_id}/reclassify": {
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Reclassify Receipt",
+        "description": "Re-run the classification rules on this receipt.\n\nItems whose account or share was edited manually are overrides and keep\ntheir values. Approved receipts are immutable.",
+        "operationId": "reclassify_receipt",
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The receipt breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such receipt",
             "content": {
               "application/json": {
                 "schema": {
@@ -2177,6 +2282,24 @@
         ],
         "title": "ReceiptSummary",
         "description": "A receipt as the list shows it."
+      },
+      "ReclassifyAllResponse": {
+        "properties": {
+          "receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Receipt Ids",
+            "description": "The re-classified receipts, oldest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_ids"
+        ],
+        "title": "ReclassifyAllResponse",
+        "description": "Result of the bulk re-classify action."
       },
       "SetRuleEnabledRequest": {
         "properties": {

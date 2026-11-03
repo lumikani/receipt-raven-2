@@ -12,6 +12,9 @@ from src.application.analysis.protocols.receipt_analyzer import (
     ReceiptAnalysis,
     ReceiptAnalyzerProtocol,
 )
+from src.application.classification.protocols.receipt_classifier import (
+    ReceiptClassifierProtocol,
+)
 from src.application.jobs.protocols.document_storage import DocumentStorageProtocol
 from src.application.jobs.protocols.receipt_job_repository import ReceiptJobRepositoryProtocol
 from src.application.ledger.protocols.ledger_service import LedgerServiceProtocol
@@ -34,9 +37,9 @@ class ProcessNextJobUseCase:
 
     The steps, in order: read the document, fetch the expense accounts the model
     may choose from, analyse, flag a suspicious date, pick the source account by
-    the payee rules (falling back to the configured default), store the receipt.
-    Any failure is recorded on the job, which is retried until it runs out of
-    attempts.
+    the payee rules (falling back to the configured default), stamp every item
+    with the classification rules, store the receipt. Any failure is recorded
+    on the job, which is retried until it runs out of attempts.
     """
 
     def __init__(
@@ -48,6 +51,7 @@ class ProcessNextJobUseCase:
         receipt_analyzer: ReceiptAnalyzerProtocol,
         ledger_service: LedgerServiceProtocol,
         payee_account_rules: PayeeAccountRulesProviderProtocol,
+        receipt_classifier: ReceiptClassifierProtocol,
         max_attempts: int,
         default_source_account: str | None,
         today: Callable[[], date] = local_today,
@@ -58,6 +62,7 @@ class ProcessNextJobUseCase:
         self.receipt_analyzer = receipt_analyzer
         self.ledger_service = ledger_service
         self.payee_account_rules = payee_account_rules
+        self.receipt_classifier = receipt_classifier
         self.max_attempts = max_attempts
         self.default_source_account = default_source_account
         self.today = today
@@ -85,7 +90,11 @@ class ProcessNextJobUseCase:
         analysis = await self.receipt_analyzer.analyze(
             document, job.mime_type, [account.name for account in accounts]
         )
-        return self._to_receipt(job, analysis)
+        receipt = self._to_receipt(job, analysis)
+        # Snapshot: every item is stamped with account, share and rule id now;
+        # later rule changes only apply through the manual re-classify actions.
+        await self.receipt_classifier.stamp_receipt(receipt)
+        return receipt
 
     def _to_receipt(self, job: ReceiptJob, analysis: ReceiptAnalysis) -> Receipt:
         today = self.today()
@@ -109,4 +118,5 @@ class ProcessNextJobUseCase:
             description=analysis.description,
             source_account=rule.source_account if rule else self.default_source_account,
             currency=analysis.currency,
+            card_last_digits=analysis.card_last_digits,
         )

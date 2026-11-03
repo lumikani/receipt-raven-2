@@ -161,6 +161,51 @@ class TestShareResolution:
         assert result.flagged  # still flagged: no rule matched
 
 
+class TestFallbackAccount:
+    """No rule matched: the analyzer's own account survives (cloud providers)."""
+
+    def test_unmatched_keeps_the_fallback_account_with_its_share_default(self) -> None:
+        result = classify_item(
+            "Höylä",
+            [rule("banaani")],
+            {"Expenses:Clothes": 25.0},
+            UNALLOCATED,
+            fallback_account="Expenses:Clothes",
+        )
+        assert result.expense_account == "Expenses:Clothes"
+        assert result.flatmate_share == 25.0
+        assert result.matched_rule_id is None
+        assert not result.flagged
+
+    def test_unmatched_fallback_without_share_default_is_zero_and_flagged(self) -> None:
+        result = classify_item("Höylä", [], {}, UNALLOCATED, fallback_account="Expenses:Clothes")
+        assert result.expense_account == "Expenses:Clothes"
+        assert result.flatmate_share == 0.0
+        assert result.matched_rule_id is None
+        assert result.flagged
+
+    def test_no_fallback_falls_through_to_unallocated(self) -> None:
+        # The local OCR parser emits an empty account: the rule engine alone assigns.
+        result = classify_item("Höylä", [], {}, UNALLOCATED, fallback_account=None)
+        assert result.expense_account == UNALLOCATED
+        assert result.matched_rule_id is None
+        assert result.flagged
+
+    def test_a_matching_rule_beats_the_fallback_account(self) -> None:
+        rules = [rule("banaani", account="expenses:groceries", share_override=100.0)]
+        result = classify_item(
+            "Banaani",
+            rules,
+            {},
+            UNALLOCATED,
+            fallback_account="Expenses:Clothes",
+        )
+        assert result.expense_account == "expenses:groceries"
+        assert result.flatmate_share == 100.0
+        assert result.matched_rule_id == ClassificationRuleId(1)
+        assert not result.flagged
+
+
 class TestRuleInvariants:
     def test_max_typos_out_of_range_is_rejected(self) -> None:
         with pytest.raises(ValidationError):

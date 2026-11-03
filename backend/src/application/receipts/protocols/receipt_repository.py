@@ -13,6 +13,10 @@ class ReceiptRepositoryProtocol(Protocol):
         """Return the receipt, or ``None`` when there is no such receipt."""
         ...
 
+    async def find_all_unapproved(self) -> list[Receipt]:
+        """Every unapproved receipt, oldest first."""
+        ...
+
     async def save(self, receipt: Receipt, /) -> Receipt:
         """Insert a new receipt (id 0) or update an existing one."""
         ...

@@ -111,6 +111,12 @@ class ReceiptRequest(BaseModel):
     items: list[ReceiptLineRequest] = Field(..., min_length=1)
 
 
+class ReclassifyAllResponse(BaseModel):
+    """Result of the bulk re-classify action."""
+
+    receipt_ids: list[int] = Field(description="The re-classified receipts, oldest first")
+
+
 __all__ = [
     "OcrIssue",
     "OcrNotes",
@@ -121,4 +127,5 @@ __all__ = [
     "ReceiptRequest",
     "ReceiptStatusValue",
     "ReceiptSummary",
+    "ReclassifyAllResponse",
 ]

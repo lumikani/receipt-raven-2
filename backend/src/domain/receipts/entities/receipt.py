@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -19,6 +20,7 @@ from src.domain.common.exceptions import ValidationError
 from src.domain.common.value_object import ValueObject
 from src.domain.common.value_objects import (
     ClassificationRuleId,
+    ClassificationStamp,
     ReceiptId,
     ReceiptItemId,
     ReceiptJobId,
@@ -122,6 +124,22 @@ class ReceiptItem(Entity[ReceiptItemId]):
             flatmate_share=line.flatmate_share,
         )
 
+    def stamp_classification(self, stamp: ClassificationStamp, /) -> None:
+        """Replace the classification snapshot, re-validating the invariants."""
+        candidate = ReceiptItem(
+            id=self.id,
+            name=self.name,
+            expense_account=stamp.expense_account,
+            price=self.price,
+            parsed_by=self.parsed_by,
+            flatmate_share=stamp.flatmate_share,
+            matched_rule_id=stamp.matched_rule_id,
+            classification_overridden=self.classification_overridden,
+        )
+        self.expense_account = candidate.expense_account
+        self.flatmate_share = candidate.flatmate_share
+        self.matched_rule_id = candidate.matched_rule_id
+
 
 @dataclass(eq=False)
 class Receipt(AggregateRoot[ReceiptId]):
@@ -212,6 +230,7 @@ class Receipt(AggregateRoot[ReceiptId]):
         description: str | None = None,
         source_account: str | None = None,
         currency: str = DEFAULT_CURRENCY,
+        card_last_digits: str | None = None,
     ) -> Receipt:
         """A receipt the analysis read from an uploaded document."""
         return cls(
@@ -224,6 +243,7 @@ class Receipt(AggregateRoot[ReceiptId]):
             description=description,
             source_account=source_account,
             currency=currency,
+            card_last_digits=card_last_digits,
             job_id=job_id,
             document_filename=document_filename,
             document_mime_type=document_mime_type,
@@ -272,6 +292,11 @@ class Receipt(AggregateRoot[ReceiptId]):
         A line with the id of an existing item updates that item; a line without
         an id adds an item; existing items no line mentions are removed. A line
         naming an id this receipt does not have is ignored.
+
+        Changing an existing item's expense account or flatmate share is a
+        manual classification override: the item is flagged and re-classification
+        skips it. Changing only its name or price corrects the OCR, so the item
+        stays eligible for re-classification.
         """
         self._ensure_editable()
         existing = {item.id: item for item in self.items}
@@ -283,6 +308,11 @@ class Receipt(AggregateRoot[ReceiptId]):
             item = existing.get(line.item_id)
             if item is None:
                 continue
+            overridden = (
+                item.classification_overridden
+                or line.expense_account.strip() != item.expense_account
+                or line.flatmate_share != item.flatmate_share
+            )
             updated.append(
                 ReceiptItem(
                     id=item.id,
@@ -291,11 +321,25 @@ class Receipt(AggregateRoot[ReceiptId]):
                     price=line.price,
                     parsed_by=item.parsed_by,
                     flatmate_share=line.flatmate_share,
-                    matched_rule_id=item.matched_rule_id,
-                    classification_overridden=item.classification_overridden,
+                    matched_rule_id=None if overridden else item.matched_rule_id,
+                    classification_overridden=overridden,
                 )
             )
         self.items = updated
+
+    def apply_classification(
+        self, classify: Callable[[ReceiptItem], ClassificationStamp], /
+    ) -> None:
+        """Stamp every item that is not a manual classification override.
+
+        `classify` decides one item's stamp from its current state. Overridden
+        items are skipped: their account and share are the user's decision.
+        """
+        self._ensure_editable()
+        for item in self.items:
+            if item.classification_overridden:
+                continue
+            item.stamp_classification(classify(item))
 
     def ensure_approvable(self) -> None:
         """Check every rule approval needs, before anything is sent to the ledger.

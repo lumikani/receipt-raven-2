@@ -13,6 +13,10 @@ from src.application.receipts.commands.approve_receipt_use_case import ApproveRe
 from src.application.receipts.commands.create_receipt_use_case import CreateReceiptUseCase
 from src.application.receipts.commands.delete_receipt_use_case import DeleteReceiptUseCase
 from src.application.receipts.commands.receipt_fields import ReceiptFields
+from src.application.receipts.commands.reclassify_all_unapproved_use_case import (
+    ReclassifyAllUnapprovedUseCase,
+)
+from src.application.receipts.commands.reclassify_receipt_use_case import ReclassifyReceiptUseCase
 from src.application.receipts.queries.get_receipt_use_case import GetReceiptUseCase
 from src.application.receipts.queries.list_receipts_use_case import ListReceiptsUseCase
 from src.containers import container
@@ -32,6 +36,7 @@ from src.infrastructure.receipts.schemas import (
     ReceiptRequest,
     ReceiptStatusValue,
     ReceiptSummary,
+    ReclassifyAllResponse,
 )
 
 router = APIRouter(prefix="/receipts", tags=["receipts"])
@@ -159,6 +164,17 @@ async def create_receipt(
     return receipt_to_schema(await use_case.create_receipt(request_to_fields(request)))
 
 
+@router.post("/reclassify-all-unapproved", response_model=ReclassifyAllResponse, responses=ERRORS)
+async def reclassify_all_unapproved(
+    use_case: ReclassifyAllUnapprovedUseCase = Depends(
+        inject_use_case(container.receipts.reclassify_all_unapproved_use_case)
+    ),
+) -> ReclassifyAllResponse:
+    """Re-run the classification rules on every unapproved receipt."""
+    receipts = await use_case.reclassify_all_unapproved()
+    return ReclassifyAllResponse(receipt_ids=[receipt.id.value for receipt in receipts])
+
+
 @router.get("/{receipt_id}", response_model=Receipt, responses=ERRORS)
 async def get_receipt(
     receipt_id: int,
@@ -188,6 +204,21 @@ async def approve_receipt(
     """
     receipt = await use_case.approve_receipt(receipt_id, request_to_fields(request))
     return receipt_to_schema(receipt)
+
+
+@router.post("/{receipt_id}/reclassify", response_model=Receipt, responses=ERRORS)
+async def reclassify_receipt(
+    receipt_id: int,
+    use_case: ReclassifyReceiptUseCase = Depends(
+        inject_use_case(container.receipts.reclassify_receipt_use_case)
+    ),
+) -> Receipt:
+    """Re-run the classification rules on this receipt.
+
+    Items whose account or share was edited manually are overrides and keep
+    their values. Approved receipts are immutable.
+    """
+    return receipt_to_schema(await use_case.reclassify_receipt(receipt_id))
 
 
 @router.delete("/{receipt_id}", status_code=status.HTTP_204_NO_CONTENT, responses=ERRORS)
