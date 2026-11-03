@@ -2,6 +2,12 @@ from dependency_injector import containers, providers
 
 from src.infrastructure.analysis.analyzer_factory import build_receipt_analyzer
 from src.infrastructure.analysis.payee_account_rules_file import PayeeAccountRulesFile
+from src.infrastructure.classification.repositories.account_share_default_repository import (
+    AccountShareDefaultRepository,
+)
+from src.infrastructure.classification.repositories.classification_rule_repository import (
+    ClassificationRuleRepository,
+)
 from src.infrastructure.jobs.queries.job_list_query import JobListQuery
 from src.infrastructure.jobs.repositories.receipt_job_repository import ReceiptJobRepository
 from src.infrastructure.jobs.storage.local_document_storage import LocalDocumentStorage
@@ -24,6 +30,8 @@ class SharedContainer(containers.DeclarativeContainer):
     # Repositories
     receipt_repository = providers.Factory(ReceiptRepository, db=db)
     receipt_job_repository = providers.Factory(ReceiptJobRepository, db=db)
+    classification_rule_repository = providers.Factory(ClassificationRuleRepository, db=db)
+    account_share_default_repository = providers.Factory(AccountShareDefaultRepository, db=db)
 
     # Query adapters (read models)
     receipt_list_query = providers.Factory(ReceiptListQuery, db=db)

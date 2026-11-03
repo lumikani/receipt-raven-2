@@ -24,3 +24,17 @@ class ReceiptJobId(EntityId):
     """Strongly-typed identifier of a job that analyses an uploaded receipt document."""
 
     value: int
+
+
+@dataclass(frozen=True)
+class ClassificationRuleId(EntityId):
+    """Strongly-typed classification rule identifier."""
+
+    value: int
+
+
+@dataclass(frozen=True)
+class AccountShareDefaultId(EntityId):
+    """Strongly-typed account share default identifier."""
+
+    value: int

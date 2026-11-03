@@ -13,6 +13,7 @@ from src.config import configure_logging, get_settings
 from src.containers import container
 from src.database import dispose_engine, get_session_factory, initialize_database
 from src.infrastructure.analysis.job_worker import JobWorker
+from src.infrastructure.classification.routers import classification as classification_router
 from src.infrastructure.common.error_handlers import register_error_handlers
 from src.infrastructure.common.middleware import (
     RequestIdAndLoggingMiddleware,
@@ -99,6 +100,7 @@ async def health() -> dict[str, str]:
 app.include_router(receipts_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ledger_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(classification_router.router, prefix=settings.API_V1_PREFIX)
 
 # Last: its catch-all route would otherwise shadow the API.
 mount_spa(app, STATIC_DIR, settings.API_V1_PREFIX)

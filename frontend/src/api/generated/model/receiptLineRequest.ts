@@ -18,4 +18,9 @@ export interface ReceiptLineRequest {
   /** @maxLength 500 */
   expense_account?: string;
   price: number;
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  flatmate_share?: number;
 }

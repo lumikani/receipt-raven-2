@@ -17,7 +17,13 @@ from src.domain.common.aggregate_root import AggregateRoot
 from src.domain.common.entity import Entity
 from src.domain.common.exceptions import ValidationError
 from src.domain.common.value_object import ValueObject
-from src.domain.common.value_objects import ReceiptId, ReceiptItemId, ReceiptJobId
+from src.domain.common.value_objects import (
+    ClassificationRuleId,
+    ReceiptId,
+    ReceiptItemId,
+    ReceiptJobId,
+    check_share,
+)
 from src.domain.receipts.exceptions import (
     ReceiptAlreadyApprovedError,
     ReceiptNotApprovableError,
@@ -33,6 +39,8 @@ BALANCE_TOLERANCE = 0.005
 # Amounts are in this currency unless the receipt says otherwise.
 DEFAULT_CURRENCY = "EUR"
 _CURRENCY_CODE = re.compile(r"^[A-Z]{3}$")
+
+# Flatmate share of an item's price is validated by common's check_share.
 
 
 class ReceiptStatus(StrEnum):
@@ -76,22 +84,32 @@ class ReceiptLine(ValueObject):
     expense_account: str
     price: float
     item_id: ReceiptItemId | None = None
+    flatmate_share: float = 0.0
 
 
 @dataclass(eq=False)
 class ReceiptItem(Entity[ReceiptItemId]):
-    """One purchased product and the expense account it is booked to."""
+    """One purchased product, its expense account and its flatmate share.
+
+    `matched_rule_id` is the classification rule that stamped the item (null
+    when unmatched); `classification_overridden` marks a manual edit of the
+    account or share, which re-classification skips.
+    """
 
     id: ReceiptItemId
     name: str
     expense_account: str
     price: float
     parsed_by: str
+    flatmate_share: float = 0.0
+    matched_rule_id: ClassificationRuleId | None = None
+    classification_overridden: bool = False
 
     def __post_init__(self) -> None:
         self.name = _required_text(self.name, "name", "Item name")
         self.expense_account = self.expense_account.strip()
         self.price = _finite(self.price, "price", "Item price")
+        check_share(self.flatmate_share, "flatmate_share")
 
     @classmethod
     def from_line(cls, line: ReceiptLine, parsed_by: str) -> ReceiptItem:
@@ -101,6 +119,7 @@ class ReceiptItem(Entity[ReceiptItemId]):
             expense_account=line.expense_account,
             price=line.price,
             parsed_by=parsed_by,
+            flatmate_share=line.flatmate_share,
         )
 
 
@@ -127,6 +146,10 @@ class Receipt(AggregateRoot[ReceiptId]):
     source_account: str | None = None
     currency: str = DEFAULT_CURRENCY
     status: ReceiptStatus = ReceiptStatus.UNAPPROVED
+    # True only after a successful ledger submit on approval.
+    booked: bool = False
+    # Card last digits the analysis read from the receipt, e.g. from a `Kortti:` line.
+    card_last_digits: str | None = None
     job_id: ReceiptJobId | None = None
     document_filename: str | None = None
     document_mime_type: str | None = None
@@ -267,6 +290,9 @@ class Receipt(AggregateRoot[ReceiptId]):
                     expense_account=line.expense_account,
                     price=line.price,
                     parsed_by=item.parsed_by,
+                    flatmate_share=line.flatmate_share,
+                    matched_rule_id=item.matched_rule_id,
+                    classification_overridden=item.classification_overridden,
                 )
             )
         self.items = updated

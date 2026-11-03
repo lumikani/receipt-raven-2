@@ -21,7 +21,11 @@ export interface Receipt {
   /** ISO 4217 code of every amount on the receipt */
   currency: string;
   status: ReceiptStatus;
+  /** True when approval wrote a ledger entry */
+  booked?: boolean;
   source_account: string | null;
+  /** Card digits read from the receipt, if any */
+  card_last_digits?: string | null;
   parsed_by: string;
   items: ReceiptItem[];
   /** Analysis notes; null for receipts entered by hand */

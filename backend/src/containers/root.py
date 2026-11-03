@@ -2,6 +2,7 @@ from dependency_injector import containers, providers
 
 from src.config import get_settings
 from src.containers.analysis import AnalysisContainer
+from src.containers.classification import ClassificationContainer
 from src.containers.jobs import JobsContainer
 from src.containers.ledger import LedgerContainer
 from src.containers.receipts import ReceiptsContainer
@@ -36,6 +37,12 @@ class RootContainer(containers.DeclarativeContainer):
         uploads_cleanup=shared.uploads_cleanup,
     )
     ledger = providers.Container(LedgerContainer, ledger_service=shared.ledger_service)
+    classification = providers.Container(
+        ClassificationContainer,
+        classification_rule_repository=shared.classification_rule_repository,
+        account_share_default_repository=shared.account_share_default_repository,
+        ledger_service=shared.ledger_service,
+    )
     analysis = providers.Container(
         AnalysisContainer,
         settings=settings,

@@ -18,6 +18,8 @@ export interface ReceiptSummary {
   /** ISO 4217 code of every amount on the receipt */
   currency: string;
   status: ReceiptSummaryStatus;
+  /** True when approval wrote a ledger entry */
+  booked?: boolean;
   source_account: string | null;
   item_count: number;
   has_ocr_issues: boolean;

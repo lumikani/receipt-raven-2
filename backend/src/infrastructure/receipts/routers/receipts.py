@@ -54,7 +54,9 @@ def receipt_to_schema(receipt: ReceiptEntity) -> Receipt:
         total_sum=receipt.total_sum,
         currency=receipt.currency,
         status=receipt.status.value,
+        booked=receipt.booked,
         source_account=receipt.source_account,
+        card_last_digits=receipt.card_last_digits,
         parsed_by=receipt.parsed_by,
         items=[
             ReceiptItem(
@@ -62,6 +64,11 @@ def receipt_to_schema(receipt: ReceiptEntity) -> Receipt:
                 name=item.name,
                 expense_account=item.expense_account,
                 price=item.price,
+                flatmate_share=item.flatmate_share,
+                matched_rule_id=(
+                    item.matched_rule_id.value if item.matched_rule_id is not None else None
+                ),
+                classification_overridden=item.classification_overridden,
             )
             for item in receipt.items
         ],
@@ -101,6 +108,7 @@ def request_to_fields(request: ReceiptRequest) -> ReceiptFields:
                 expense_account=line.expense_account,
                 price=line.price,
                 item_id=ReceiptItemId(line.id) if line.id is not None else None,
+                flatmate_share=line.flatmate_share,
             )
             for line in request.items
         ],
@@ -126,6 +134,7 @@ async def list_receipts(
                 total_sum=view.total_sum,
                 currency=view.currency,
                 status=view.status.value,
+                booked=view.booked,
                 source_account=view.source_account,
                 item_count=view.item_count,
                 has_ocr_issues=view.has_ocr_issues,

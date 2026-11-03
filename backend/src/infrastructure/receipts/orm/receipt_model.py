@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Date, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database import Base
@@ -26,6 +26,10 @@ class ReceiptModel(Base):
     parsed_by: Mapped[str] = mapped_column(String(200), nullable=False)
     source_account: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # True only after a successful ledger submit on approval.
+    booked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
+    # Card last digits read from the receipt, e.g. from a `Kortti:` line.
+    card_last_digits: Mapped[str | None] = mapped_column(String(20), nullable=True)
     document_filename: Mapped[str | None] = mapped_column(String(500), nullable=True)
     document_mime_type: Mapped[str | None] = mapped_column(String(200), nullable=True)
     ocr_notes: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -54,5 +58,14 @@ class ReceiptItemModel(Base):
     expense_account: Mapped[str] = mapped_column(String(500), nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     parsed_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Classification snapshot: flatmate share (0-100), the rule that matched
+    # (null when unmatched) and the manual-override flag.
+    flatmate_share: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
+    matched_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("classification_rules.id", ondelete="SET NULL"), nullable=True
+    )
+    classification_overridden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="0"
+    )
 
     receipt: Mapped[ReceiptModel] = relationship(back_populates="items")
