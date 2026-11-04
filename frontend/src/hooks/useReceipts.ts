@@ -1,7 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { toast } from 'sonner';
 
-import type { ListReceiptsStatus, ReceiptRequest } from '@/api/generated/model';
+import { apiErrorMessage } from '@/api/errors';
+import type {
+  ExportReceiptsParams,
+  ListReceiptsStatus,
+  ReceiptRequest,
+} from '@/api/generated/model';
 import {
+  exportReceipts,
   getGetReceiptQueryKey,
   getListReceiptsQueryKey,
   useApproveReceipt,
@@ -48,5 +56,45 @@ export function useReceiptMutations() {
     approveReceipt: (receiptId: number, data: ReceiptRequest) =>
       approve.mutateAsync({ receiptId, data }),
     deleteReceipt: (receiptId: number) => remove.mutateAsync({ receiptId }),
+  };
+}
+
+/**
+ * The balancing-export actions of the receipt history: the `;`-delimited CSV
+ * download and the headerless TSV clipboard variant for Sheets. The selection
+ * (`ids` / `from`+`to`) maps straight onto the export endpoint's parameters.
+ */
+export function useReceiptExport() {
+  const [isPending, setIsPending] = useState(false);
+
+  const run = async (params: ExportReceiptsParams, format: 'csv' | 'tsv') => {
+    setIsPending(true);
+    try {
+      const blob = await exportReceipts(format === 'tsv' ? { ...params, format } : params);
+      if (format === 'tsv') {
+        await navigator.clipboard.writeText(await blob.text());
+        toast.success('Export copied — paste it into the balancing spreadsheet');
+      } else {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'receipts-export.csv';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+        toast.success('Export downloaded');
+      }
+    } catch (error) {
+      toast.error(apiErrorMessage(error, 'The export could not be created.'));
+    } finally {
+      setIsPending(false);
+    }
+  };
+
+  return {
+    isPending,
+    downloadCsv: (params: ExportReceiptsParams) => run(params, 'csv'),
+    copyForSheets: (params: ExportReceiptsParams) => run(params, 'tsv'),
   };
 }

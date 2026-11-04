@@ -37,6 +37,7 @@ interface State {
   shareDefaultUpserts: AccountShareDefaultRequest[];
   deletedShareDefaults: string[];
   reclassifications: number[];
+  exportRequests: { ids: string | null; from: string | null; to: string | null; format: string }[];
 }
 
 const fresh = (): State => ({
@@ -56,6 +57,7 @@ const fresh = (): State => ({
   shareDefaultUpserts: [],
   deletedShareDefaults: [],
   reclassifications: [],
+  exportRequests: [],
 });
 
 let state = fresh();
@@ -76,6 +78,7 @@ export const recorded = {
   shareDefaultUpserts: () => state.shareDefaultUpserts,
   deletedShareDefaults: () => state.deletedShareDefaults,
   reclassifications: () => state.reclassifications,
+  exportRequests: () => state.exportRequests,
 };
 
 /** Make the next approvals fail the way a ledger rejection does. */
@@ -208,6 +211,18 @@ export function seedJob(overrides: Partial<Job> = {}): Job {
   return job;
 }
 
+/** The export rule of the backend: approved, personal-card role, EUR, a shared item. */
+function isExportEligible(receipt: Receipt): boolean {
+  const sharedCard = state.accountRoles.shared_card;
+  const isSharedCard = sharedCard != null && receipt.source_account === sharedCard;
+  return (
+    receipt.status === 'approved' &&
+    !isSharedCard &&
+    receipt.currency === 'EUR' &&
+    receipt.items.some((item) => (item.flatmate_share ?? 0) > 0)
+  );
+}
+
 function summary(receipt: Receipt): ReceiptSummary {
   return {
     id: receipt.id,
@@ -219,6 +234,7 @@ function summary(receipt: Receipt): ReceiptSummary {
     status: receipt.status,
     booked: receipt.booked ?? false,
     source_account: receipt.source_account,
+    export_eligible: isExportEligible(receipt),
     item_count: receipt.items.length,
     has_ocr_issues: Boolean(receipt.ocr_notes?.suspicious_date),
     created_at: receipt.created_at,
@@ -321,12 +337,96 @@ const conflict = () =>
     { status: 409 }
   );
 
+/** One balancing-export row, amounts in integer cents (rounded once, half-up). */
+interface ExportRow {
+  sharedCostCents: number;
+  description: string;
+  purchaseCents: number;
+}
+
+function exportRow(receipt: Receipt): ExportRow {
+  const sharedRaw = receipt.items
+    .filter((item) => (item.flatmate_share ?? 0) > 0 && (item.flatmate_share ?? 0) < 100)
+    .reduce((sum, item) => sum + 2 * (item.flatmate_share ?? 0) * item.price, 0);
+  const purchaseRaw = receipt.items
+    .filter((item) => item.flatmate_share === 100)
+    .reduce((sum, item) => sum + item.price * 100, 0);
+  const detail = receipt.description || receipt.items.map((item) => item.name).join(', ');
+  return {
+    sharedCostCents: Math.round(sharedRaw + 1e-9),
+    description: `${receipt.date.slice(5)} ${receipt.payee} ${detail}`,
+    purchaseCents: Math.round(purchaseRaw + 1e-9),
+  };
+}
+
+const commaDecimal = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
+
+function quoteField(field: string, delimiter: string): string {
+  if (
+    field.includes(delimiter) ||
+    field.includes('"') ||
+    field.includes('\n') ||
+    field.includes('\r')
+  )
+    return `"${field.replace(/"/g, '""')}"`;
+  return field;
+}
+
 export const fakeApiHandlers = [
   http.get('/api/v1/receipts', ({ request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const matching = state.receipts.filter((receipt) => !status || receipt.status === status);
     return HttpResponse.json(page(matching.map(summary), url));
+  }),
+
+  // Declared before /receipts/:id so "export.csv" is not swallowed by it, like the backend.
+  http.get('/api/v1/receipts/export.csv', ({ request }) => {
+    const url = new URL(request.url);
+    const idsParam = url.searchParams.get('ids');
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    const format = url.searchParams.get('format') ?? 'csv';
+    state.exportRequests.push({ ids: idsParam, from, to, format });
+
+    const ids = (idsParam ?? '')
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((id) => Number.isInteger(id));
+    const selected = state.receipts.filter((receipt) => {
+      if (idsParam?.trim() && !ids.includes(receipt.id)) return false;
+      if (from && receipt.date < from) return false;
+      if (to && receipt.date > to) return false;
+      return true;
+    });
+    const rows = selected
+      .filter(isExportEligible)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+      .map(exportRow);
+
+    const isTsv = format === 'tsv';
+    const delimiter = isTsv ? '\t' : ';';
+    const header = isTsv ? '' : 'shared_cost;description;purchase_for_flatmate\r\n';
+    const body =
+      header +
+      rows
+        .map(
+          (row) =>
+            [
+              commaDecimal(row.sharedCostCents),
+              quoteField(row.description, delimiter),
+              commaDecimal(row.purchaseCents),
+            ].join(delimiter) + '\r\n'
+        )
+        .join('');
+    return HttpResponse.text(body, {
+      headers: {
+        'Content-Type': isTsv
+          ? 'text/tab-separated-values; charset=utf-8'
+          : 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="receipts-export.${isTsv ? 'tsv' : 'csv'}"`,
+      },
+    });
   }),
 
   http.get('/api/v1/receipts/:id', ({ params }) => {

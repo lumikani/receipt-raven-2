@@ -21,6 +21,8 @@ export interface ReceiptSummary {
   /** True when approval wrote a ledger entry */
   booked?: boolean;
   source_account: string | null;
+  /** True when the receipt gets a balancing-export row */
+  export_eligible?: boolean;
   item_count: number;
   has_ocr_issues: boolean;
   created_at: string;
