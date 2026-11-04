@@ -140,9 +140,7 @@ async def test_lists_accounts_from_the_read_journal_by_type(tmp_path: Path) -> N
         LedgerAccount("income:salary", AccountType.INCOME),
         LedgerAccount("equity:opening", AccountType.EQUITY),
     ]
-    assert calls == [
-        ["hledger", "-f", str(tmp_path / "main.journal"), "accounts", "--used", "--types"]
-    ]
+    assert calls == [["hledger", "-f", str(tmp_path / "main.journal"), "accounts", "--types"]]
 
     assert await subject.list_accounts(AccountType.EXPENSES) == [
         LedgerAccount("expenses:groceries", AccountType.EXPENSES)
@@ -350,6 +348,8 @@ async def test_real_hledger_binary_reads_and_appends(tmp_path: Path) -> None:
     assert HLEDGER is not None
     read = tmp_path / "current.journal"
     read.write_text(
+        "account expenses:declared-only\n"
+        "\n"
         "2026-01-01 * K-Market\n"
         "    expenses:groceries  10.00 EUR\n"
         "    liabilities:op:credit-card:gold  -10.00 EUR\n",
@@ -363,6 +363,11 @@ async def test_real_hledger_binary_reads_and_appends(tmp_path: Path) -> None:
     )
     assert (
         LedgerAccount("liabilities:op:credit-card:gold", AccountType.LIABILITIES)
+        in await subject.list_accounts()
+    )
+    # Declared but never posted to: hidden by --used, listed without it.
+    assert (
+        LedgerAccount("expenses:declared-only", AccountType.EXPENSES)
         in await subject.list_accounts()
     )
     assert await subject.list_payees() == ["K-Market"]

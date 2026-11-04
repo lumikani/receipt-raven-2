@@ -176,7 +176,7 @@ class HledgerLedgerService:
         raise LedgerUnavailableError(f"{argv[0]} exited with code {result.returncode}: {detail}")
 
     async def list_accounts(self, account_type: AccountType | None = None) -> list[LedgerAccount]:
-        result = await self._run_cli(self._argv(self.read_file, "accounts", "--used", "--types"))
+        result = await self._run_cli(self._argv(self.read_file, "accounts", "--types"))
         accounts: list[LedgerAccount] = []
         for line in result.stdout.splitlines():
             name, _, annotation = line.partition(";")
