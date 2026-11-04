@@ -29,23 +29,26 @@ export function isBalanced(total: number, prices: readonly number[]): boolean {
 /**
  * Merge the selected items into one, placed where the first of them was.
  * Names are joined with ", ", prices summed to the cent, and the expense
- * account taken from the last selected item. The merged item is new: it has
- * no id, so the backend replaces the originals with it.
+ * account and classification taken from the last selected item. The merged
+ * item is new: it has no id, so the backend replaces the originals with it.
  */
 export function mergeItems<T extends PricedItem & { id?: number }>(
   items: readonly T[],
   selected: ReadonlySet<number>
-): PricedItem[] {
+): T[] {
   const picked = items.filter((_, index) => selected.has(index));
   const [first] = picked;
   const last = picked.at(-1);
   if (picked.length < 2 || !first || !last) return [...items];
 
-  const merged: PricedItem = {
+  // The merged item keeps the last selected item's classification but is new:
+  // it has no id, so the backend replaces the originals with it.
+  const { id: _mergedId, ...rest } = last;
+  const merged: T = {
+    ...rest,
     name: picked.map((item) => item.name).join(', '),
-    expense_account: last.expense_account,
     price: itemsSum(picked.map((item) => item.price)),
-  };
+  } as T;
   const firstIndex = items.indexOf(first);
   return items.flatMap((item, index) => {
     if (index === firstIndex) return [merged];

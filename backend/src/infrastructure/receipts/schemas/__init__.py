@@ -23,12 +23,21 @@ class OcrNotes(BaseModel):
 
 
 class ReceiptItem(BaseModel):
-    """One purchased product."""
+    """One purchased product with its classification snapshot."""
 
     id: int
     name: str
     expense_account: str
     price: float
+    flatmate_share: float = Field(
+        0, description="Percentage of the price attributable to the flatmate"
+    )
+    matched_rule_id: int | None = Field(
+        None, description="The classification rule that matched, if any"
+    )
+    classification_overridden: bool = Field(
+        False, description="True when the account or share was edited manually"
+    )
 
 
 class ReceiptDocument(BaseModel):
@@ -48,7 +57,11 @@ class ReceiptSummary(BaseModel):
     total_sum: float
     currency: str = Field(description="ISO 4217 code of every amount on the receipt")
     status: ReceiptStatusValue
+    booked: bool = Field(False, description="True when approval wrote a ledger entry")
     source_account: str | None
+    export_eligible: bool = Field(
+        False, description="True when the receipt gets a balancing-export row"
+    )
     item_count: int
     has_ocr_issues: bool
     created_at: dt.datetime
@@ -64,7 +77,11 @@ class Receipt(BaseModel):
     total_sum: float
     currency: str = Field(description="ISO 4217 code of every amount on the receipt")
     status: ReceiptStatusValue
+    booked: bool = Field(False, description="True when approval wrote a ledger entry")
     source_account: str | None
+    card_last_digits: str | None = Field(
+        None, description="Card digits read from the receipt, if any"
+    )
     parsed_by: str
     items: list[ReceiptItem]
     ocr_notes: OcrNotes | None = Field(
@@ -82,6 +99,7 @@ class ReceiptLineRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=500)
     expense_account: str = Field("", max_length=500)
     price: float
+    flatmate_share: float = Field(0, ge=0, le=100)
 
 
 class ReceiptRequest(BaseModel):
@@ -96,6 +114,12 @@ class ReceiptRequest(BaseModel):
     items: list[ReceiptLineRequest] = Field(..., min_length=1)
 
 
+class ReclassifyAllResponse(BaseModel):
+    """Result of the bulk re-classify action."""
+
+    receipt_ids: list[int] = Field(description="The re-classified receipts, oldest first")
+
+
 __all__ = [
     "OcrIssue",
     "OcrNotes",
@@ -106,4 +130,5 @@ __all__ = [
     "ReceiptRequest",
     "ReceiptStatusValue",
     "ReceiptSummary",
+    "ReclassifyAllResponse",
 ]

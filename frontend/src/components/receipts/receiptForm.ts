@@ -14,6 +14,12 @@ const itemSchema = z.object({
   name: z.string().trim().min(1, 'Name the item'),
   expense_account: z.string().min(1, 'Choose an expense account'),
   price: amount,
+  /** Percentage of the price attributable to the flatmate, 0–100. */
+  flatmate_share: z.number().min(0, '0–100').max(100, '0–100'),
+  /** The rule that stamped the row; null when no rule matched. Display only. */
+  matched_rule_id: z.number().nullable().optional(),
+  /** True when the account or share was edited manually. Display only. */
+  classification_overridden: z.boolean().optional(),
 });
 
 export const receiptFormSchema = z.object({
@@ -38,7 +44,14 @@ export const COMMON_CURRENCIES = ['EUR', 'JPY', 'USD', 'GBP', 'SEK', 'NOK', 'DKK
 /** Currencies the ledger takes for now; the backend refuses to approve others. */
 export const BOOKABLE_CURRENCIES = new Set(['EUR']);
 
-export const emptyItem = (): ReceiptFormItem => ({ name: '', expense_account: '', price: '' });
+export const emptyItem = (): ReceiptFormItem => ({
+  name: '',
+  expense_account: '',
+  price: '',
+  flatmate_share: 0,
+  matched_rule_id: null,
+  classification_overridden: false,
+});
 
 export function toFormValues(receipt: Receipt | undefined): ReceiptFormValues {
   if (!receipt) {
@@ -64,6 +77,9 @@ export function toFormValues(receipt: Receipt | undefined): ReceiptFormValues {
       name: item.name,
       expense_account: item.expense_account,
       price: amountToInput(item.price, receipt.currency),
+      flatmate_share: item.flatmate_share ?? 0,
+      matched_rule_id: item.matched_rule_id ?? null,
+      classification_overridden: item.classification_overridden ?? false,
     })),
   };
 }
@@ -86,6 +102,7 @@ export function toRequest(values: ReceiptFormValues): ReceiptRequest {
       name: item.name.trim(),
       expense_account: item.expense_account,
       price: amountOf(item.price),
+      flatmate_share: item.flatmate_share,
     })),
   };
 }

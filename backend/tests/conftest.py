@@ -18,6 +18,7 @@ os.environ["AI_PROVIDER"] = "mock"
 os.environ["AI_MOCK_DELAY_SECONDS"] = "0"
 os.environ["UPLOADS_DIR"] = tempfile.mkdtemp(prefix="receipt-raven-uploads-")
 os.environ["PAYEE_ACCOUNT_RULES_PATH"] = "/nonexistent/payee-account-rules.json"
+os.environ["ACCOUNT_ROLES_PATH"] = "/nonexistent/account-roles.json"
 
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 from pathlib import Path
@@ -34,7 +35,7 @@ from src.domain.jobs.entities.receipt_job import ReceiptJob
 from src.infrastructure.jobs.storage.local_document_storage import LocalDocumentStorage
 from src.main import app
 from src.models import Base
-from tests.fakes import FakeLedger, FakeReceiptAnalyzer
+from tests.fakes import FakeAccountRoles, FakeLedger, FakeReceiptAnalyzer
 
 
 @pytest.fixture
@@ -64,6 +65,14 @@ def ledger() -> Generator[FakeLedger]:
 
 
 @pytest.fixture
+def account_roles() -> Generator[FakeAccountRoles]:
+    """The source-account roles every use case sees during the test."""
+    fake = FakeAccountRoles()
+    with container.shared.account_roles.override(providers.Object(fake)):
+        yield fake
+
+
+@pytest.fixture
 def analyzer() -> Generator[FakeReceiptAnalyzer]:
     """The AI model the analysis worker asks during the test."""
     fake = FakeReceiptAnalyzer()
@@ -85,6 +94,7 @@ def uploads_dir(tmp_path: Path) -> Generator[Path]:
 async def client(
     db_session: AsyncSession,
     ledger: FakeLedger,
+    account_roles: FakeAccountRoles,
     analyzer: FakeReceiptAnalyzer,
     uploads_dir: Path,
 ) -> AsyncGenerator[AsyncClient]:

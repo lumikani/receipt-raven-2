@@ -1,0 +1,13 @@
+# Prisma
+
+Aleksanterinkatu 21
+00170 Helsinki
+03.11.2026 18:45
+
+Tuote                 Määrä     Hinta
+Kaurajuoma 1 l                  1,85 €
+Ruisleipä 400 g       1 kpl     2,29 €
+Oliiviöljy 0,5 l                4,99 €
+
+YHTEENSÄ                          9,13 €
+Kortti: Visa **** **** **** 1234

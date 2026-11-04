@@ -24,11 +24,13 @@ import {
 import { axiosInstance } from '../../axios-instance.ts';
 import type {
   ErrorResponse,
+  ExportReceiptsParams,
   HTTPValidationError,
   ListReceiptsParams,
   PaginatedResponseReceiptSummary,
   Receipt,
   ReceiptRequest,
+  ReclassifyAllResponse,
 } from '../model';
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
@@ -234,6 +236,196 @@ export const useCreateReceipt = <TError = ErrorResponse | HTTPValidationError, T
 > => {
   return useMutation(getCreateReceiptMutationOptions(options), queryClient);
 };
+/**
+ * Re-run the classification rules on every unapproved receipt.
+ * @summary Reclassify All Unapproved
+ */
+export const reclassifyAllUnapproved = (signal?: AbortSignal) => {
+  return axiosInstance<ReclassifyAllResponse>({
+    url: `/api/v1/receipts/reclassify-all-unapproved`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getReclassifyAllUnapprovedMutationKey = () => ['reclassifyAllUnapproved'] as const;
+
+export const getReclassifyAllUnapprovedMutationOptions = <
+  TError = ErrorResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reclassifyAllUnapproved>>,
+    TError,
+    void,
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reclassifyAllUnapproved>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getReclassifyAllUnapprovedMutationKey();
+  const { mutation: mutationOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reclassifyAllUnapproved>>,
+    void
+  > = () => {
+    return reclassifyAllUnapproved();
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReclassifyAllUnapprovedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reclassifyAllUnapproved>>
+>;
+
+export type ReclassifyAllUnapprovedMutationError = ErrorResponse;
+
+/**
+ * @summary Reclassify All Unapproved
+ */
+export const useReclassifyAllUnapproved = <TError = ErrorResponse, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof reclassifyAllUnapproved>>,
+      TError,
+      void,
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof reclassifyAllUnapproved>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getReclassifyAllUnapprovedMutationOptions(options), queryClient);
+};
+/**
+ * Download the balancing export, or its headerless TSV variant for Sheets.
+ *
+ * Eligibility (approved, personal card, bookable currency, at least one item
+ * with a flatmate share) is always applied; the selection only narrows it.
+ * @summary Export Receipts
+ */
+export const exportReceipts = (params?: ExportReceiptsParams, signal?: AbortSignal) => {
+  return axiosInstance<Blob>({
+    url: `/api/v1/receipts/export.csv`,
+    method: 'GET',
+    params,
+    responseType: 'blob',
+    signal,
+  });
+};
+
+export const getExportReceiptsQueryKey = (params?: ExportReceiptsParams) => {
+  return [`/api/v1/receipts/export.csv`, ...(params ? [params] : [])] as const;
+};
+
+export const getExportReceiptsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportReceipts>>,
+  TError = ErrorResponse,
+>(
+  params?: ExportReceiptsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportReceipts>>, TError, TData>>;
+  }
+) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getExportReceiptsQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportReceipts>>> = ({ signal }) =>
+    exportReceipts(params, signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportReceipts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type ExportReceiptsQueryResult = NonNullable<Awaited<ReturnType<typeof exportReceipts>>>;
+export type ExportReceiptsQueryError = ErrorResponse;
+
+export function useExportReceipts<
+  TData = Awaited<ReturnType<typeof exportReceipts>>,
+  TError = ErrorResponse,
+>(
+  params: undefined | ExportReceiptsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportReceipts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportReceipts>>,
+          TError,
+          Awaited<ReturnType<typeof exportReceipts>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useExportReceipts<
+  TData = Awaited<ReturnType<typeof exportReceipts>>,
+  TError = ErrorResponse,
+>(
+  params?: ExportReceiptsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportReceipts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportReceipts>>,
+          TError,
+          Awaited<ReturnType<typeof exportReceipts>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useExportReceipts<
+  TData = Awaited<ReturnType<typeof exportReceipts>>,
+  TError = ErrorResponse,
+>(
+  params?: ExportReceiptsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportReceipts>>, TError, TData>>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Export Receipts
+ */
+
+export function useExportReceipts<
+  TData = Awaited<ReturnType<typeof exportReceipts>>,
+  TError = ErrorResponse,
+>(
+  params?: ExportReceiptsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportReceipts>>, TError, TData>>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getExportReceiptsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
 /**
  * @summary Get Receipt
  */
@@ -495,4 +687,87 @@ export const useApproveReceipt = <TError = ErrorResponse | HTTPValidationError, 
   TContext
 > => {
   return useMutation(getApproveReceiptMutationOptions(options), queryClient);
+};
+/**
+ * Re-run the classification rules on this receipt.
+ *
+ * Items whose account or share was edited manually are overrides and keep
+ * their values. Approved receipts are immutable.
+ * @summary Reclassify Receipt
+ */
+export const reclassifyReceipt = (receiptId: number, signal?: AbortSignal) => {
+  return axiosInstance<Receipt>({
+    url: `/api/v1/receipts/${receiptId}/reclassify`,
+    method: 'POST',
+    signal,
+  });
+};
+
+export const getReclassifyReceiptMutationKey = () => ['reclassifyReceipt'] as const;
+
+export const getReclassifyReceiptMutationOptions = <
+  TError = ErrorResponse | HTTPValidationError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reclassifyReceipt>>,
+    TError,
+    ReclassifyReceiptMutationVariables,
+    TContext
+  >;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reclassifyReceipt>>,
+  TError,
+  ReclassifyReceiptMutationVariables,
+  TContext
+> => {
+  const mutationKey = getReclassifyReceiptMutationKey();
+  const { mutation: mutationOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey } };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reclassifyReceipt>>,
+    ReclassifyReceiptMutationVariables
+  > = (props) => {
+    const { receiptId } = props ?? {};
+
+    return reclassifyReceipt(receiptId);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReclassifyReceiptMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reclassifyReceipt>>
+>;
+
+export type ReclassifyReceiptMutationError = ErrorResponse | HTTPValidationError;
+export type ReclassifyReceiptMutationVariables = { receiptId: number };
+
+/**
+ * @summary Reclassify Receipt
+ */
+export const useReclassifyReceipt = <
+  TError = ErrorResponse | HTTPValidationError,
+  TContext = unknown,
+>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof reclassifyReceipt>>,
+      TError,
+      ReclassifyReceiptMutationVariables,
+      TContext
+    >;
+  },
+  queryClient?: QueryClient
+): UseMutationResult<
+  Awaited<ReturnType<typeof reclassifyReceipt>>,
+  TError,
+  ReclassifyReceiptMutationVariables,
+  TContext
+> => {
+  return useMutation(getReclassifyReceiptMutationOptions(options), queryClient);
 };

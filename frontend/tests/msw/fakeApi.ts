@@ -1,12 +1,19 @@
 import { http, HttpResponse } from 'msw';
 
 import type {
+  AccountRolesResponse,
+  AccountShareDefault,
+  AccountShareDefaultRequest,
+  ClassificationRule,
+  ClassificationRuleRequest,
   Job,
   LedgerAccount,
   Receipt,
   ReceiptRequest,
   ReceiptSummary,
+  SetRuleEnabledRequest,
 } from '@/api/generated/model';
+import { normalizeName } from '@/lib/classification';
 
 /**
  * An in-memory Receipt Raven API, so a test can approve a receipt or retry a
@@ -20,6 +27,17 @@ interface State {
   ledgerRejection: string | null;
   approvals: { receiptId: number; body: ReceiptRequest }[];
   uploads: { name: string; type: string; size: number }[];
+  rules: ClassificationRule[];
+  shareDefaults: AccountShareDefault[];
+  accountRoles: AccountRolesResponse;
+  createdRules: ClassificationRuleRequest[];
+  updatedRules: { ruleId: number; body: ClassificationRuleRequest }[];
+  deletedRuleIds: number[];
+  enabledChanges: { ruleId: number; enabled: boolean }[];
+  shareDefaultUpserts: AccountShareDefaultRequest[];
+  deletedShareDefaults: string[];
+  reclassifications: number[];
+  exportRequests: { ids: string | null; from: string | null; to: string | null; format: string }[];
 }
 
 const fresh = (): State => ({
@@ -29,6 +47,17 @@ const fresh = (): State => ({
   ledgerRejection: null,
   approvals: [],
   uploads: [],
+  rules: [],
+  shareDefaults: [],
+  accountRoles: defaultAccountRoles(),
+  createdRules: [],
+  updatedRules: [],
+  deletedRuleIds: [],
+  enabledChanges: [],
+  shareDefaultUpserts: [],
+  deletedShareDefaults: [],
+  reclassifications: [],
+  exportRequests: [],
 });
 
 let state = fresh();
@@ -42,6 +71,14 @@ export const recorded = {
   approvals: () => state.approvals,
   uploads: () => state.uploads,
   receipts: () => state.receipts,
+  createdRules: () => state.createdRules,
+  updatedRules: () => state.updatedRules,
+  deletedRuleIds: () => state.deletedRuleIds,
+  enabledChanges: () => state.enabledChanges,
+  shareDefaultUpserts: () => state.shareDefaultUpserts,
+  deletedShareDefaults: () => state.deletedShareDefaults,
+  reclassifications: () => state.reclassifications,
+  exportRequests: () => state.exportRequests,
 };
 
 /** Make the next approvals fail the way a ledger rejection does. */
@@ -52,12 +89,64 @@ export function rejectApprovals(reason: string) {
 const ACCOUNTS: LedgerAccount[] = [
   { name: 'Assets:Checking', type: 'Assets' },
   { name: 'Liabilities:CreditCard', type: 'Liabilities' },
+  { name: 'Liabilities:SharedAccount', type: 'Liabilities' },
   { name: 'Expenses:Groceries', type: 'Expenses' },
   { name: 'Expenses:Office', type: 'Expenses' },
   { name: 'Expenses:Clothes', type: 'Expenses' },
+  { name: 'Expenses:Unallocated', type: 'Expenses' },
+  { name: 'Expenses:PurchaseForFlatmate', type: 'Expenses' },
+  { name: 'Expenses:FlatmateAdjustment', type: 'Expenses' },
 ];
 
-type ItemSeed = [name: string, account: string, price: number];
+function defaultAccountRoles(): AccountRolesResponse {
+  return {
+    personal_cards: ['Assets:Checking', 'Liabilities:CreditCard'],
+    shared_card: 'Liabilities:SharedAccount',
+    flatmate_expense_adjustment: 'Expenses:FlatmateAdjustment',
+    purchase_for_flatmate: 'Expenses:PurchaseForFlatmate',
+    unallocated_account: 'Expenses:Unallocated',
+  };
+}
+
+/** Seed one classification rule; the normalized pattern is computed like the backend's. */
+export function seedRule(
+  overrides: Partial<ClassificationRule> & { pattern: string }
+): ClassificationRule {
+  const { pattern, ...fields } = overrides;
+  const rule: ClassificationRule = {
+    id: state.nextId++,
+    pattern,
+    normalized_pattern: normalizeName(pattern),
+    max_typos: 1,
+    expense_account: 'Expenses:Groceries',
+    flatmate_share_override: null,
+    enabled: true,
+    created_at: '2026-10-01T08:00:00Z',
+    ...fields,
+  };
+  state.rules.push(rule);
+  return rule;
+}
+
+export function seedShareDefault(expense_account: string, share: number): AccountShareDefault {
+  const entry: AccountShareDefault = {
+    id: state.nextId++,
+    expense_account,
+    share,
+    created_at: '2026-10-01T08:00:00Z',
+  };
+  state.shareDefaults.push(entry);
+  return entry;
+}
+
+type ItemSeed = [
+  name: string,
+  account: string,
+  price: number,
+  share?: number,
+  matchedRuleId?: number | null,
+  overridden?: boolean,
+];
 
 export function seedReceipt(
   overrides: Partial<Receipt> & { itemSeeds?: ItemSeed[] } = {}
@@ -65,11 +154,21 @@ export function seedReceipt(
   const { itemSeeds, ...fields } = overrides;
   const id = state.nextId++;
   const items = (itemSeeds ?? [['Maito', 'Expenses:Groceries', 2.5]]).map(
-    ([name, expense_account, price]) => ({
+    ([
+      name,
+      expense_account,
+      price,
+      flatmate_share = 0,
+      matched_rule_id = null,
+      classification_overridden = false,
+    ]) => ({
       id: state.nextId++,
       name,
       expense_account,
       price,
+      flatmate_share,
+      matched_rule_id,
+      classification_overridden,
     })
   );
   const receipt: Receipt = {
@@ -80,6 +179,7 @@ export function seedReceipt(
     total_sum: items.reduce((sum, item) => sum + item.price, 0),
     currency: 'EUR',
     status: 'unapproved',
+    booked: false,
     source_account: 'Assets:Checking',
     parsed_by: 'anthropic/claude-haiku-4.5',
     items,
@@ -111,6 +211,18 @@ export function seedJob(overrides: Partial<Job> = {}): Job {
   return job;
 }
 
+/** The export rule of the backend: approved, personal-card role, EUR, a shared item. */
+function isExportEligible(receipt: Receipt): boolean {
+  const sharedCard = state.accountRoles.shared_card;
+  const isSharedCard = sharedCard != null && receipt.source_account === sharedCard;
+  return (
+    receipt.status === 'approved' &&
+    !isSharedCard &&
+    receipt.currency === 'EUR' &&
+    receipt.items.some((item) => (item.flatmate_share ?? 0) > 0)
+  );
+}
+
 function summary(receipt: Receipt): ReceiptSummary {
   return {
     id: receipt.id,
@@ -120,7 +232,9 @@ function summary(receipt: Receipt): ReceiptSummary {
     total_sum: receipt.total_sum,
     currency: receipt.currency,
     status: receipt.status,
+    booked: receipt.booked ?? false,
     source_account: receipt.source_account,
+    export_eligible: isExportEligible(receipt),
     item_count: receipt.items.length,
     has_ocr_issues: Boolean(receipt.ocr_notes?.suspicious_date),
     created_at: receipt.created_at,
@@ -134,6 +248,7 @@ function page<T>(items: T[], url: URL) {
 }
 
 function applyRequest(receipt: Receipt, body: ReceiptRequest): Receipt {
+  const existing = new Map(receipt.items.map((item) => [item.id, item]));
   return {
     ...receipt,
     payee: body.payee,
@@ -142,13 +257,54 @@ function applyRequest(receipt: Receipt, body: ReceiptRequest): Receipt {
     date: body.date,
     total_sum: body.total_sum,
     currency: body.currency ?? 'EUR',
-    items: body.items.map((item) => ({
-      id: item.id ?? state.nextId++,
-      name: item.name,
-      expense_account: item.expense_account ?? '',
-      price: item.price,
-    })),
+    items: body.items.map((item) => {
+      const before = item.id != null ? existing.get(item.id) : undefined;
+      // Editing the account or share is a manual override, like the backend.
+      const overridden =
+        (before?.classification_overridden ?? false) ||
+        (before !== undefined &&
+          ((item.expense_account ?? '') !== before.expense_account ||
+            (item.flatmate_share ?? 0) !== (before.flatmate_share ?? 0)));
+      return {
+        id: item.id ?? state.nextId++,
+        name: item.name,
+        expense_account: item.expense_account ?? before?.expense_account ?? '',
+        price: item.price,
+        flatmate_share: item.flatmate_share ?? before?.flatmate_share ?? 0,
+        matched_rule_id: overridden ? null : (before?.matched_rule_id ?? null),
+        classification_overridden: overridden,
+      };
+    }),
   };
+}
+
+/** The fake rule engine: exact normalized match against the enabled rules. */
+function reclassify(receipt: Receipt): Receipt {
+  const defaults = new Map(
+    state.shareDefaults.map((entry) => [entry.expense_account, entry.share])
+  );
+  const items = receipt.items.map((item) => {
+    if (item.classification_overridden) return item;
+    const normalized = normalizeName(item.name);
+    const rule = state.rules.find(
+      (candidate) => candidate.enabled && candidate.normalized_pattern === normalized
+    );
+    if (!rule) {
+      return {
+        ...item,
+        expense_account: item.expense_account || state.accountRoles.unallocated_account,
+        flatmate_share: defaults.get(item.expense_account) ?? 0,
+        matched_rule_id: null,
+      };
+    }
+    return {
+      ...item,
+      expense_account: rule.expense_account,
+      flatmate_share: rule.flatmate_share_override ?? defaults.get(rule.expense_account) ?? 0,
+      matched_rule_id: rule.id,
+    };
+  });
+  return { ...receipt, items };
 }
 
 function replaceReceipt(receipt: Receipt) {
@@ -171,12 +327,106 @@ const PIXEL = Uint8Array.from(
   (char) => char.charCodeAt(0)
 );
 
+// Like the backend, a normalized pattern must be unique across rules.
+const duplicatePattern = (normalized: string, exceptId: number | null) =>
+  state.rules.some((rule) => rule.normalized_pattern === normalized && rule.id !== exceptId);
+
+const conflict = () =>
+  HttpResponse.json(
+    { error: 'conflict', message: 'A rule with this normalized pattern already exists.' },
+    { status: 409 }
+  );
+
+/** One balancing-export row, amounts in integer cents (rounded once, half-up). */
+interface ExportRow {
+  sharedCostCents: number;
+  description: string;
+  purchaseCents: number;
+}
+
+function exportRow(receipt: Receipt): ExportRow {
+  const sharedRaw = receipt.items
+    .filter((item) => (item.flatmate_share ?? 0) > 0 && (item.flatmate_share ?? 0) < 100)
+    .reduce((sum, item) => sum + 2 * (item.flatmate_share ?? 0) * item.price, 0);
+  const purchaseRaw = receipt.items
+    .filter((item) => item.flatmate_share === 100)
+    .reduce((sum, item) => sum + item.price * 100, 0);
+  const detail = receipt.description || receipt.items.map((item) => item.name).join(', ');
+  return {
+    sharedCostCents: Math.round(sharedRaw + 1e-9),
+    description: `${receipt.date.slice(5)} ${receipt.payee} ${detail}`,
+    purchaseCents: Math.round(purchaseRaw + 1e-9),
+  };
+}
+
+const commaDecimal = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
+
+function quoteField(field: string, delimiter: string): string {
+  if (
+    field.includes(delimiter) ||
+    field.includes('"') ||
+    field.includes('\n') ||
+    field.includes('\r')
+  )
+    return `"${field.replace(/"/g, '""')}"`;
+  return field;
+}
+
 export const fakeApiHandlers = [
   http.get('/api/v1/receipts', ({ request }) => {
     const url = new URL(request.url);
     const status = url.searchParams.get('status');
     const matching = state.receipts.filter((receipt) => !status || receipt.status === status);
     return HttpResponse.json(page(matching.map(summary), url));
+  }),
+
+  // Declared before /receipts/:id so "export.csv" is not swallowed by it, like the backend.
+  http.get('/api/v1/receipts/export.csv', ({ request }) => {
+    const url = new URL(request.url);
+    const idsParam = url.searchParams.get('ids');
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    const format = url.searchParams.get('format') ?? 'csv';
+    state.exportRequests.push({ ids: idsParam, from, to, format });
+
+    const ids = (idsParam ?? '')
+      .split(',')
+      .map((part) => Number(part.trim()))
+      .filter((id) => Number.isInteger(id));
+    const selected = state.receipts.filter((receipt) => {
+      if (idsParam?.trim() && !ids.includes(receipt.id)) return false;
+      if (from && receipt.date < from) return false;
+      if (to && receipt.date > to) return false;
+      return true;
+    });
+    const rows = selected
+      .filter(isExportEligible)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+      .map(exportRow);
+
+    const isTsv = format === 'tsv';
+    const delimiter = isTsv ? '\t' : ';';
+    const header = isTsv ? '' : 'shared_cost;description;purchase_for_flatmate\r\n';
+    const body =
+      header +
+      rows
+        .map(
+          (row) =>
+            [
+              commaDecimal(row.sharedCostCents),
+              quoteField(row.description, delimiter),
+              commaDecimal(row.purchaseCents),
+            ].join(delimiter) + '\r\n'
+        )
+        .join('');
+    return HttpResponse.text(body, {
+      headers: {
+        'Content-Type': isTsv
+          ? 'text/tab-separated-values; charset=utf-8'
+          : 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="receipts-export.${isTsv ? 'tsv' : 'csv'}"`,
+      },
+    });
   }),
 
   http.get('/api/v1/receipts/:id', ({ params }) => {
@@ -224,6 +474,15 @@ export const fakeApiHandlers = [
     return state.receipts.length < before ? new HttpResponse(null, { status: 204 }) : notFound();
   }),
 
+  http.post('/api/v1/receipts/:id/reclassify', ({ params }) => {
+    const receipt = state.receipts.find((r) => r.id === Number(params.id));
+    if (!receipt) return notFound();
+    state.reclassifications.push(receipt.id);
+    const reclassified = reclassify(receipt);
+    replaceReceipt(reclassified);
+    return HttpResponse.json(reclassified);
+  }),
+
   http.get('/api/v1/ledger/accounts', ({ request }) => {
     const types = new URL(request.url).searchParams.getAll('type');
     const items = ACCOUNTS.filter((account) => types.length === 0 || types.includes(account.type));
@@ -233,6 +492,107 @@ export const fakeApiHandlers = [
   http.get('/api/v1/ledger/payees', () =>
     HttpResponse.json({ items: ['Alko', 'K-Market', 'Prisma'] })
   ),
+
+  http.get('/api/v1/ledger/account-roles', () => HttpResponse.json(state.accountRoles)),
+
+  http.get('/api/v1/classification/rules', () => HttpResponse.json({ items: state.rules })),
+
+  http.post('/api/v1/classification/rules', async ({ request }) => {
+    const body = (await request.json()) as ClassificationRuleRequest;
+    const normalized = normalizeName(body.pattern);
+    if (duplicatePattern(normalized, null)) return conflict();
+    state.createdRules.push(body);
+    const rule: ClassificationRule = {
+      id: state.nextId++,
+      pattern: body.pattern,
+      normalized_pattern: normalized,
+      max_typos: body.max_typos ?? 1,
+      expense_account: body.expense_account,
+      flatmate_share_override: body.flatmate_share_override ?? null,
+      enabled: body.enabled ?? true,
+      created_at: '2026-10-09T08:00:00Z',
+    };
+    state.rules.push(rule);
+    return HttpResponse.json(rule, { status: 201 });
+  }),
+
+  http.put('/api/v1/classification/rules/:id', async ({ params, request }) => {
+    const ruleId = Number(params.id);
+    const rule = state.rules.find((candidate) => candidate.id === ruleId);
+    if (!rule) return notFound();
+    const body = (await request.json()) as ClassificationRuleRequest;
+    const normalized = normalizeName(body.pattern);
+    if (duplicatePattern(normalized, ruleId)) return conflict();
+    state.updatedRules.push({ ruleId, body });
+    const updated: ClassificationRule = {
+      ...rule,
+      pattern: body.pattern,
+      normalized_pattern: normalized,
+      max_typos: body.max_typos ?? rule.max_typos,
+      expense_account: body.expense_account,
+      flatmate_share_override: body.flatmate_share_override ?? null,
+      enabled: body.enabled ?? rule.enabled,
+    };
+    state.rules = state.rules.map((candidate) => (candidate.id === ruleId ? updated : candidate));
+    return HttpResponse.json(updated);
+  }),
+
+  http.post('/api/v1/classification/rules/:id/set-enabled', async ({ params, request }) => {
+    const ruleId = Number(params.id);
+    const rule = state.rules.find((candidate) => candidate.id === ruleId);
+    if (!rule) return notFound();
+    const body = (await request.json()) as SetRuleEnabledRequest;
+    state.enabledChanges.push({ ruleId, enabled: body.enabled });
+    const updated: ClassificationRule = { ...rule, enabled: body.enabled };
+    state.rules = state.rules.map((candidate) => (candidate.id === ruleId ? updated : candidate));
+    return HttpResponse.json(updated);
+  }),
+
+  http.delete('/api/v1/classification/rules/:id', ({ params }) => {
+    const ruleId = Number(params.id);
+    if (!state.rules.some((rule) => rule.id === ruleId)) return notFound();
+    state.deletedRuleIds.push(ruleId);
+    state.rules = state.rules.filter((rule) => rule.id !== ruleId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get('/api/v1/classification/account-share-defaults', () =>
+    HttpResponse.json({ items: state.shareDefaults })
+  ),
+
+  http.put('/api/v1/classification/account-share-defaults', async ({ request }) => {
+    const body = (await request.json()) as AccountShareDefaultRequest;
+    state.shareDefaultUpserts.push(body);
+    const existing = state.shareDefaults.find(
+      (entry) => entry.expense_account === body.expense_account
+    );
+    if (existing) {
+      const updated: AccountShareDefault = { ...existing, share: body.share };
+      state.shareDefaults = state.shareDefaults.map((entry) =>
+        entry.expense_account === body.expense_account ? updated : entry
+      );
+      return HttpResponse.json(updated);
+    }
+    const created: AccountShareDefault = {
+      id: state.nextId++,
+      expense_account: body.expense_account,
+      share: body.share,
+      created_at: '2026-10-09T08:00:00Z',
+    };
+    state.shareDefaults.push(created);
+    return HttpResponse.json(created);
+  }),
+
+  http.delete('/api/v1/classification/account-share-defaults/:expenseAccount', ({ params }) => {
+    const expenseAccount = String(params.expenseAccount);
+    if (!state.shareDefaults.some((entry) => entry.expense_account === expenseAccount))
+      return notFound();
+    state.deletedShareDefaults.push(expenseAccount);
+    state.shareDefaults = state.shareDefaults.filter(
+      (entry) => entry.expense_account !== expenseAccount
+    );
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   http.get('/api/v1/jobs', ({ request }) =>
     HttpResponse.json(page(state.jobs, new URL(request.url)))

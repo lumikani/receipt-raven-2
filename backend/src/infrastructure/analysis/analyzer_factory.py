@@ -2,6 +2,7 @@
 
 from src.application.analysis.protocols.receipt_analyzer import ReceiptAnalyzerProtocol
 from src.config import Settings
+from src.infrastructure.analysis.local_ocr.analyzer import LocalOCRAnalyzer
 from src.infrastructure.analysis.mock_analyzer import MockReceiptAnalyzer
 from src.infrastructure.analysis.openai_compatible_analyzer import (
     OpenAICompatibleReceiptAnalyzer,
@@ -9,7 +10,7 @@ from src.infrastructure.analysis.openai_compatible_analyzer import (
 
 
 def build_receipt_analyzer(settings: Settings) -> ReceiptAnalyzerProtocol:
-    """`AI_PROVIDER`: openrouter (default), openai or mock."""
+    """`AI_PROVIDER`: openrouter (default), openai, mock or local."""
     match settings.AI_PROVIDER:
         case "openrouter":
             return OpenAICompatibleReceiptAnalyzer(
@@ -29,3 +30,9 @@ def build_receipt_analyzer(settings: Settings) -> ReceiptAnalyzerProtocol:
             )
         case "mock":
             return MockReceiptAnalyzer(delay_seconds=settings.AI_MOCK_DELAY_SECONDS)
+        case "local":
+            return LocalOCRAnalyzer(
+                base_url=settings.LOCAL_BASE_URL,
+                model=settings.LOCAL_MODEL,
+                timeout_seconds=settings.AI_TIMEOUT_SECONDS,
+            )

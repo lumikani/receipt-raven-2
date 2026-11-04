@@ -2,6 +2,7 @@ from dependency_injector import containers, providers
 
 from src.config import get_settings
 from src.containers.analysis import AnalysisContainer
+from src.containers.classification import ClassificationContainer
 from src.containers.jobs import JobsContainer
 from src.containers.ledger import LedgerContainer
 from src.containers.receipts import ReceiptsContainer
@@ -21,12 +22,6 @@ class RootContainer(containers.DeclarativeContainer):
 
     shared = providers.Container(SharedContainer, db=db, settings=settings)
 
-    receipts = providers.Container(
-        ReceiptsContainer,
-        receipt_repository=shared.receipt_repository,
-        receipt_list_query=shared.receipt_list_query,
-        ledger_service=shared.ledger_service,
-    )
     jobs = providers.Container(
         JobsContainer,
         settings=settings,
@@ -35,7 +30,27 @@ class RootContainer(containers.DeclarativeContainer):
         document_storage=shared.document_storage,
         uploads_cleanup=shared.uploads_cleanup,
     )
-    ledger = providers.Container(LedgerContainer, ledger_service=shared.ledger_service)
+    ledger = providers.Container(
+        LedgerContainer,
+        ledger_service=shared.ledger_service,
+        account_roles=shared.account_roles,
+        settings=settings,
+    )
+    classification = providers.Container(
+        ClassificationContainer,
+        classification_rule_repository=shared.classification_rule_repository,
+        account_share_default_repository=shared.account_share_default_repository,
+        ledger_service=shared.ledger_service,
+        settings=settings,
+    )
+    receipts = providers.Container(
+        ReceiptsContainer,
+        receipt_repository=shared.receipt_repository,
+        receipt_list_query=shared.receipt_list_query,
+        ledger_service=shared.ledger_service,
+        receipt_classifier=classification.receipt_classifier,
+        account_roles=shared.account_roles,
+    )
     analysis = providers.Container(
         AnalysisContainer,
         settings=settings,
@@ -45,4 +60,6 @@ class RootContainer(containers.DeclarativeContainer):
         receipt_analyzer=shared.receipt_analyzer,
         ledger_service=shared.ledger_service,
         payee_account_rules=shared.payee_account_rules,
+        account_roles=shared.account_roles,
+        receipt_classifier=classification.receipt_classifier,
     )

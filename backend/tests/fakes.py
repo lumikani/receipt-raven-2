@@ -9,6 +9,7 @@ from src.application.analysis.protocols.receipt_analyzer import (
     ReceiptAnalysisError,
 )
 from src.domain.ledger.account import AccountType, LedgerAccount
+from src.domain.ledger.account_roles import AccountRoles
 from src.domain.ledger.exceptions import LedgerRejectedTransactionError, LedgerUnavailableError
 from src.domain.ledger.receipt_transaction import ReceiptTransaction
 
@@ -50,7 +51,18 @@ class FakeLedger:
         self.submitted.append(transaction)
 
 
+@dataclass
+class FakeAccountRoles:
+    """Supplies fixed source-account roles to the use cases under test."""
+
+    roles: AccountRoles = field(default_factory=AccountRoles)
+
+    def load(self) -> AccountRoles:
+        return self.roles
+
+
 def analysis(
+    *,
     payee: str = "K-Market",
     receipt_date: date | None = None,
     products: tuple[tuple[str, str, float], ...] = (
@@ -59,6 +71,7 @@ def analysis(
     ),
     total: float = 15.79,
     currency: str = "EUR",
+    card_last_digits: str | None = None,
 ) -> ReceiptAnalysis:
     return ReceiptAnalysis(
         payee=payee,
@@ -68,6 +81,7 @@ def analysis(
         total=total,
         model="fake-model",
         currency=currency,
+        card_last_digits=card_last_digits,
     )
 
 

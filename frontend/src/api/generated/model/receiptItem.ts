@@ -6,11 +6,17 @@
  */
 
 /**
- * One purchased product.
+ * One purchased product with its classification snapshot.
  */
 export interface ReceiptItem {
   id: number;
   name: string;
   expense_account: string;
   price: number;
+  /** Percentage of the price attributable to the flatmate */
+  flatmate_share?: number;
+  /** The classification rule that matched, if any */
+  matched_rule_id?: number | null;
+  /** True when the account or share was edited manually */
+  classification_overridden?: boolean;
 }

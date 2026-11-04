@@ -147,6 +147,159 @@
         }
       }
     },
+    "/api/v1/receipts/reclassify-all-unapproved": {
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Reclassify All Unapproved",
+        "description": "Re-run the classification rules on every unapproved receipt.",
+        "operationId": "reclassify_all_unapproved",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReclassifyAllResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The receipt breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such receipt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/export.csv": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Export Receipts",
+        "description": "Download the balancing export, or its headerless TSV variant for Sheets.\n\nEligibility (approved, personal card, bookable currency, at least one item\nwith a flatmate share) is always applied; the selection only narrows it.",
+        "operationId": "export_receipts",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated receipt ids to include",
+              "title": "Ids"
+            },
+            "description": "Comma-separated receipt ids to include"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First receipt date, inclusive",
+              "title": "From"
+            },
+            "description": "First receipt date, inclusive"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last receipt date, inclusive",
+              "title": "To"
+            },
+            "description": "Last receipt date, inclusive"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "tsv"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The balancing export: one row per eligible approved personal-card receipt. `;`-delimited comma-decimal CSV with a header row, or headerless tab-separated TSV with `format=tsv`.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/tab-separated-values": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed selection parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/receipts/{receipt_id}": {
       "get": {
         "tags": [
@@ -324,6 +477,69 @@
           },
           "502": {
             "description": "The ledger is down or rejected it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/receipts/{receipt_id}/reclassify": {
+      "post": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Reclassify Receipt",
+        "description": "Re-run the classification rules on this receipt.\n\nItems whose account or share was edited manually are overrides and keep\ntheir values. Approved receipts are immutable.",
+        "operationId": "reclassify_receipt",
+        "parameters": [
+          {
+            "name": "receipt_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Receipt Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The receipt breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such receipt",
             "content": {
               "application/json": {
                 "schema": {
@@ -665,10 +881,768 @@
           }
         }
       }
+    },
+    "/api/v1/ledger/account-roles": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "Get Account Roles",
+        "description": "The configured account roles; configuration, not the ledger, so no 502.",
+        "operationId": "get_account_roles",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRolesResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/classification/rules": {
+      "get": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "List Rules",
+        "operationId": "list_rules",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_ClassificationRule_"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Create Rule",
+        "operationId": "create_rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationRule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/classification/rules/{rule_id}": {
+      "get": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Get Rule",
+        "operationId": "get_rule",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationRule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Update Rule",
+        "operationId": "update_rule",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationRuleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationRule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Delete Rule",
+        "operationId": "delete_rule",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/classification/rules/{rule_id}/set-enabled": {
+      "post": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Set Rule Enabled",
+        "description": "Enable or disable a rule; disabled rules never match.",
+        "operationId": "set_rule_enabled",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRuleEnabledRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationRule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/classification/account-share-defaults": {
+      "get": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "List Account Share Defaults",
+        "operationId": "list_account_share_defaults",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse_AccountShareDefault_"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Set Account Share Default",
+        "description": "Create or update one account's default flatmate share.",
+        "operationId": "set_account_share_default",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountShareDefaultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountShareDefault"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/classification/account-share-defaults/{expense_account}": {
+      "delete": {
+        "tags": [
+          "classification"
+        ],
+        "summary": "Delete Account Share Default",
+        "operationId": "delete_account_share_default",
+        "parameters": [
+          {
+            "name": "expense_account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Expense Account"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "The request breaks a business rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such rule or account default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The normalized pattern already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AccountRolesResponse": {
+        "properties": {
+          "personal_cards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Personal Cards"
+          },
+          "shared_card": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Card"
+          },
+          "flatmate_expense_adjustment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatmate Expense Adjustment"
+          },
+          "purchase_for_flatmate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase For Flatmate"
+          },
+          "unallocated_account": {
+            "type": "string",
+            "title": "Unallocated Account"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personal_cards",
+          "shared_card",
+          "flatmate_expense_adjustment",
+          "purchase_for_flatmate",
+          "unallocated_account"
+        ],
+        "title": "AccountRolesResponse",
+        "description": "The configured source-account roles, for the review screen's routing preview.\n\nNull fields mean \"not configured\"; an empty `personal_cards` with a null\n`shared_card` routes every source account as a personal card."
+      },
+      "AccountShareDefault": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "expense_account": {
+            "type": "string",
+            "title": "Expense Account"
+          },
+          "share": {
+            "type": "number",
+            "title": "Share",
+            "description": "Default flatmate share, 0-100"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "expense_account",
+          "share",
+          "created_at"
+        ],
+        "title": "AccountShareDefault",
+        "description": "An expense account's default flatmate share."
+      },
+      "AccountShareDefaultRequest": {
+        "properties": {
+          "expense_account": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Expense Account"
+          },
+          "share": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Share"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expense_account",
+          "share"
+        ],
+        "title": "AccountShareDefaultRequest",
+        "description": "Body of the upsert request."
+      },
       "Body_upload_receipt": {
         "properties": {
           "file": {
@@ -683,6 +1657,147 @@
           "file"
         ],
         "title": "Body_upload_receipt"
+      },
+      "ClassificationRule": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "Pattern",
+            "description": "The product name pattern as entered"
+          },
+          "normalized_pattern": {
+            "type": "string",
+            "title": "Normalized Pattern",
+            "description": "The normalized form matching runs on"
+          },
+          "max_typos": {
+            "type": "integer",
+            "title": "Max Typos",
+            "description": "0-2; 0 = exact match only"
+          },
+          "expense_account": {
+            "type": "string",
+            "title": "Expense Account"
+          },
+          "flatmate_share_override": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatmate Share Override",
+            "description": "Flatmate share (0-100) beating the account default; null = use default"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "pattern",
+          "normalized_pattern",
+          "max_typos",
+          "expense_account",
+          "enabled",
+          "created_at"
+        ],
+        "title": "ClassificationRule",
+        "description": "A stored classification rule."
+      },
+      "ClassificationRuleRequest": {
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Pattern"
+          },
+          "max_typos": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Max Typos",
+            "description": "0-2; 0 = exact match only",
+            "default": 1
+          },
+          "expense_account": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Expense Account"
+          },
+          "flatmate_share_override": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatmate Share Override"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "pattern",
+          "expense_account"
+        ],
+        "title": "ClassificationRuleRequest",
+        "description": "Body of the create and update requests."
+      },
+      "CollectionResponse_AccountShareDefault_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountShareDefault"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CollectionResponse[AccountShareDefault]"
+      },
+      "CollectionResponse_ClassificationRule_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClassificationRule"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CollectionResponse[ClassificationRule]"
       },
       "CollectionResponse_LedgerAccount_": {
         "properties": {
@@ -998,6 +2113,12 @@
             ],
             "title": "Status"
           },
+          "booked": {
+            "type": "boolean",
+            "title": "Booked",
+            "description": "True when approval wrote a ledger entry",
+            "default": false
+          },
           "source_account": {
             "anyOf": [
               {
@@ -1008,6 +2129,18 @@
               }
             ],
             "title": "Source Account"
+          },
+          "card_last_digits": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Card Last Digits",
+            "description": "Card digits read from the receipt, if any"
           },
           "parsed_by": {
             "type": "string",
@@ -1114,6 +2247,30 @@
           "price": {
             "type": "number",
             "title": "Price"
+          },
+          "flatmate_share": {
+            "type": "number",
+            "title": "Flatmate Share",
+            "description": "Percentage of the price attributable to the flatmate",
+            "default": 0
+          },
+          "matched_rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Rule Id",
+            "description": "The classification rule that matched, if any"
+          },
+          "classification_overridden": {
+            "type": "boolean",
+            "title": "Classification Overridden",
+            "description": "True when the account or share was edited manually",
+            "default": false
           }
         },
         "type": "object",
@@ -1124,7 +2281,7 @@
           "price"
         ],
         "title": "ReceiptItem",
-        "description": "One purchased product."
+        "description": "One purchased product with its classification snapshot."
       },
       "ReceiptLineRequest": {
         "properties": {
@@ -1154,6 +2311,13 @@
           "price": {
             "type": "number",
             "title": "Price"
+          },
+          "flatmate_share": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Flatmate Share",
+            "default": 0
           }
         },
         "type": "object",
@@ -1272,6 +2436,12 @@
             ],
             "title": "Status"
           },
+          "booked": {
+            "type": "boolean",
+            "title": "Booked",
+            "description": "True when approval wrote a ledger entry",
+            "default": false
+          },
           "source_account": {
             "anyOf": [
               {
@@ -1282,6 +2452,12 @@
               }
             ],
             "title": "Source Account"
+          },
+          "export_eligible": {
+            "type": "boolean",
+            "title": "Export Eligible",
+            "description": "True when the receipt gets a balancing-export row",
+            "default": false
           },
           "item_count": {
             "type": "integer",
@@ -1313,6 +2489,38 @@
         ],
         "title": "ReceiptSummary",
         "description": "A receipt as the list shows it."
+      },
+      "ReclassifyAllResponse": {
+        "properties": {
+          "receipt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Receipt Ids",
+            "description": "The re-classified receipts, oldest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "receipt_ids"
+        ],
+        "title": "ReclassifyAllResponse",
+        "description": "Result of the bulk re-classify action."
+      },
+      "SetRuleEnabledRequest": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "SetRuleEnabledRequest",
+        "description": "Body of the enable/disable request."
       },
       "ValidationError": {
         "properties": {

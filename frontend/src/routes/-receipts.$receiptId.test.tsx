@@ -100,12 +100,19 @@ describe('reviewing a receipt', () => {
     await expect
       .poll(() => recorded.approvals()[0]?.body.items)
       .toEqual([
-        { id: null, name: 'Kahvi, Kynä', expense_account: 'Expenses:Office', price: 14.98 },
+        {
+          id: null,
+          name: 'Kahvi, Kynä',
+          expense_account: 'Expenses:Office',
+          price: 14.98,
+          flatmate_share: 0,
+        },
         {
           id: receipt.items[1]?.id,
           name: 'Vihko',
           expense_account: 'Expenses:Office',
           price: 4.99,
+          flatmate_share: 0,
         },
       ]);
   });

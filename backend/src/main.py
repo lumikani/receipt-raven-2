@@ -13,6 +13,7 @@ from src.config import configure_logging, get_settings
 from src.containers import container
 from src.database import dispose_engine, get_session_factory, initialize_database
 from src.infrastructure.analysis.job_worker import JobWorker
+from src.infrastructure.classification.routers import classification as classification_router
 from src.infrastructure.common.error_handlers import register_error_handlers
 from src.infrastructure.common.middleware import (
     RequestIdAndLoggingMiddleware,
@@ -37,6 +38,9 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Start the database and the background tasks; stop them on shutdown."""
     initialize_database(settings)
+    # Resolve the ledger service once so a misconfigured LEDGER_PROVIDER (for
+    # example hledger without HLEDGER_FILE) fails at startup, not on first use.
+    container.shared.ledger_service()
     tasks = [
         asyncio.create_task(
             run_cleanup_schedule(
@@ -56,6 +60,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
         environment=settings.ENVIRONMENT,
         version=settings.VERSION,
         ai_provider=settings.AI_PROVIDER,
+        ledger_provider=settings.LEDGER_PROVIDER,
     )
     yield
     for task in tasks:
@@ -99,6 +104,7 @@ async def health() -> dict[str, str]:
 app.include_router(receipts_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(jobs_router.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ledger_router.router, prefix=settings.API_V1_PREFIX)
+app.include_router(classification_router.router, prefix=settings.API_V1_PREFIX)
 
 # Last: its catch-all route would otherwise shadow the API.
 mount_spa(app, STATIC_DIR, settings.API_V1_PREFIX)

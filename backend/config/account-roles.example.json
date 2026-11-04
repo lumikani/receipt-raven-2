@@ -1,0 +1,14 @@
+{
+  "personalCards": [
+    "liabilities:op:credit-card:gold",
+    "liabilities:op:credit-card:duo"
+  ],
+  "sharedCard": "liabilities:personal:shared-account",
+  "flatmateExpenseAdjustment": "expenses:flatmate-expense-adjustment",
+  "purchaseForFlatmate": "expenses:purchase-for-flatmate",
+  "cardLastDigits": {
+    "1111": "liabilities:op:credit-card:gold",
+    "2222": "liabilities:op:credit-card:duo",
+    "0244": "liabilities:personal:shared-account"
+  }
+}

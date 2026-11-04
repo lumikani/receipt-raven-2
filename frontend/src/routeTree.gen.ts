@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as RulesRouteImport } from './routes/rules'
 import { Route as UploadRouteImport } from './routes/upload'
 import { Route as ReceiptsReceiptIdRouteImport } from './routes/receipts.$receiptId'
 import { Route as ReceiptsNewRouteImport } from './routes/receipts.new'
@@ -23,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
 const JobsRoute = JobsRouteImport.update({
   id: '/jobs',
   path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RulesRoute = RulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UploadRoute = UploadRouteImport.update({
@@ -44,6 +50,7 @@ const ReceiptsNewRoute = ReceiptsNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/receipts/$receiptId': typeof ReceiptsReceiptIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/receipts/$receiptId': typeof ReceiptsReceiptIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
@@ -59,6 +67,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/rules': typeof RulesRoute
   '/upload': typeof UploadRoute
   '/receipts/$receiptId': typeof ReceiptsReceiptIdRoute
   '/receipts/new': typeof ReceiptsNewRoute
@@ -66,13 +75,25 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/jobs' | '/upload' | '/receipts/$receiptId' | '/receipts/new'
+    | '/'
+    | '/jobs'
+    | '/rules'
+    | '/upload'
+    | '/receipts/$receiptId'
+    | '/receipts/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/jobs' | '/upload' | '/receipts/$receiptId' | '/receipts/new'
+  to:
+    | '/'
+    | '/jobs'
+    | '/rules'
+    | '/upload'
+    | '/receipts/$receiptId'
+    | '/receipts/new'
   id:
     | '__root__'
     | '/'
     | '/jobs'
+    | '/rules'
     | '/upload'
     | '/receipts/$receiptId'
     | '/receipts/new'
@@ -81,6 +102,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   JobsRoute: typeof JobsRoute
+  RulesRoute: typeof RulesRoute
   UploadRoute: typeof UploadRoute
   ReceiptsReceiptIdRoute: typeof ReceiptsReceiptIdRoute
   ReceiptsNewRoute: typeof ReceiptsNewRoute
@@ -100,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/jobs'
       fullPath: '/jobs'
       preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rules': {
+      id: '/rules'
+      path: '/rules'
+      fullPath: '/rules'
+      preLoaderRoute: typeof RulesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/upload': {
@@ -129,6 +158,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   JobsRoute: JobsRoute,
+  RulesRoute: RulesRoute,
   UploadRoute: UploadRoute,
   ReceiptsReceiptIdRoute: ReceiptsReceiptIdRoute,
   ReceiptsNewRoute: ReceiptsNewRoute,

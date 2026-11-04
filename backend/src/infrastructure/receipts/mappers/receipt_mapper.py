@@ -2,7 +2,12 @@
 
 from typing import Any
 
-from src.domain.common.value_objects import ReceiptId, ReceiptItemId, ReceiptJobId
+from src.domain.common.value_objects import (
+    ClassificationRuleId,
+    ReceiptId,
+    ReceiptItemId,
+    ReceiptJobId,
+)
 from src.domain.receipts.entities.receipt import Receipt, ReceiptItem, ReceiptStatus
 from src.domain.receipts.ocr_notes import HeuristicIssue, HeuristicLevel, OcrNotes
 from src.infrastructure.common.mappers import orm_id
@@ -49,6 +54,13 @@ class ReceiptMapper:
                     expense_account=item.expense_account,
                     price=item.price,
                     parsed_by=item.parsed_by,
+                    flatmate_share=item.flatmate_share,
+                    matched_rule_id=(
+                        ClassificationRuleId(item.matched_rule_id)
+                        if item.matched_rule_id is not None
+                        else None
+                    ),
+                    classification_overridden=item.classification_overridden,
                 )
                 for item in orm_model.items
             ],
@@ -57,6 +69,8 @@ class ReceiptMapper:
             source_account=orm_model.source_account,
             currency=orm_model.currency,
             status=ReceiptStatus(orm_model.status),
+            booked=orm_model.booked,
+            card_last_digits=orm_model.card_last_digits,
             job_id=ReceiptJobId(orm_model.job_id) if orm_model.job_id is not None else None,
             document_filename=orm_model.document_filename,
             document_mime_type=orm_model.document_mime_type,
@@ -76,6 +90,8 @@ class ReceiptMapper:
         orm_model.parsed_by = domain_entity.parsed_by
         orm_model.source_account = domain_entity.source_account
         orm_model.status = domain_entity.status.value
+        orm_model.booked = domain_entity.booked
+        orm_model.card_last_digits = domain_entity.card_last_digits
         orm_model.document_filename = domain_entity.document_filename
         orm_model.document_mime_type = domain_entity.document_mime_type
         orm_model.ocr_notes = ocr_notes_to_json(domain_entity.ocr_notes)
@@ -95,5 +111,10 @@ class ReceiptMapper:
             row.expense_account = item.expense_account
             row.price = item.price
             row.parsed_by = item.parsed_by
+            row.flatmate_share = item.flatmate_share
+            row.matched_rule_id = (
+                item.matched_rule_id.value if item.matched_rule_id is not None else None
+            )
+            row.classification_overridden = item.classification_overridden
             rows.append(row)
         orm_model.items = rows
