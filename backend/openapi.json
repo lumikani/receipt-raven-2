@@ -189,6 +189,117 @@
         }
       }
     },
+    "/api/v1/receipts/export.csv": {
+      "get": {
+        "tags": [
+          "receipts"
+        ],
+        "summary": "Export Receipts",
+        "description": "Download the balancing export, or its headerless TSV variant for Sheets.\n\nEligibility (approved, personal card, bookable currency, at least one item\nwith a flatmate share) is always applied; the selection only narrows it.",
+        "operationId": "export_receipts",
+        "parameters": [
+          {
+            "name": "ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated receipt ids to include",
+              "title": "Ids"
+            },
+            "description": "Comma-separated receipt ids to include"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "First receipt date, inclusive",
+              "title": "From"
+            },
+            "description": "First receipt date, inclusive"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Last receipt date, inclusive",
+              "title": "To"
+            },
+            "description": "Last receipt date, inclusive"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "tsv"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The balancing export: one row per eligible approved personal-card receipt. `;`-delimited comma-decimal CSV with a header row, or headerless tab-separated TSV with `format=tsv`.",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/tab-separated-values": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Malformed selection parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/receipts/{receipt_id}": {
       "get": {
         "tags": [

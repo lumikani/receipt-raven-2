@@ -1,5 +1,8 @@
 """Repository for Receipt aggregates."""
 
+from collections.abc import Collection
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +17,25 @@ class ReceiptRepository(BaseRepository[Receipt, ReceiptModel]):
 
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db, ReceiptModel, ReceiptMapper())
+
+    async def find_all(
+        self,
+        /,
+        *,
+        ids: Collection[int] | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[Receipt]:
+        """Receipts matching the selection, date-ascending then id-ascending."""
+        stmt = select(ReceiptModel).order_by(ReceiptModel.receipt_date, ReceiptModel.id)
+        if ids is not None:
+            stmt = stmt.where(ReceiptModel.id.in_(ids))
+        if from_date is not None:
+            stmt = stmt.where(ReceiptModel.receipt_date >= from_date)
+        if to_date is not None:
+            stmt = stmt.where(ReceiptModel.receipt_date <= to_date)
+        result = await self.db.execute(stmt)
+        return [self._mapper.to_domain(row) for row in result.scalars().all()]
 
     async def find_all_unapproved(self) -> list[Receipt]:
         """Every unapproved receipt, oldest first."""

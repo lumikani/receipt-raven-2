@@ -7,6 +7,7 @@ from src.application.receipts.commands.reclassify_all_unapproved_use_case import
     ReclassifyAllUnapprovedUseCase,
 )
 from src.application.receipts.commands.reclassify_receipt_use_case import ReclassifyReceiptUseCase
+from src.application.receipts.queries.export_receipts_use_case import ExportReceiptsUseCase
 from src.application.receipts.queries.get_receipt_use_case import GetReceiptUseCase
 from src.application.receipts.queries.list_receipts_use_case import ListReceiptsUseCase
 
@@ -22,6 +23,9 @@ class ReceiptsContainer(containers.DeclarativeContainer):
 
     list_receipts_use_case = providers.Factory(
         ListReceiptsUseCase, receipt_list_query=receipt_list_query
+    )
+    export_receipts_use_case = providers.Factory(
+        ExportReceiptsUseCase, receipt_repository=receipt_repository, account_roles=account_roles
     )
     get_receipt_use_case = providers.Factory(
         GetReceiptUseCase, receipt_repository=receipt_repository

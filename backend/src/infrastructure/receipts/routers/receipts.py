@@ -4,9 +4,11 @@ Routers convert between Pydantic schemas and what the use cases take and
 return (primitives in, domain entities or view DTOs out). They hold no logic.
 """
 
-from typing import Annotated, Any
+from datetime import date
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 
 from src.application.common.pagination import PageRequest
 from src.application.receipts.commands.approve_receipt_use_case import ApproveReceiptUseCase
@@ -17,6 +19,7 @@ from src.application.receipts.commands.reclassify_all_unapproved_use_case import
     ReclassifyAllUnapprovedUseCase,
 )
 from src.application.receipts.commands.reclassify_receipt_use_case import ReclassifyReceiptUseCase
+from src.application.receipts.queries.export_receipts_use_case import ExportReceiptsUseCase
 from src.application.receipts.queries.get_receipt_use_case import GetReceiptUseCase
 from src.application.receipts.queries.list_receipts_use_case import ListReceiptsUseCase
 from src.containers import container
@@ -27,6 +30,7 @@ from src.infrastructure.common.di import inject_use_case
 from src.infrastructure.common.documents import document_url
 from src.infrastructure.common.schemas import ErrorResponse, PaginatedResponse
 from src.infrastructure.common.schemas.pagination import page_request
+from src.infrastructure.receipts.export_rendering import render_csv, render_tsv
 from src.infrastructure.receipts.schemas import (
     OcrIssue,
     OcrNotes,
@@ -173,6 +177,71 @@ async def reclassify_all_unapproved(
     """Re-run the classification rules on every unapproved receipt."""
     receipts = await use_case.reclassify_all_unapproved()
     return ReclassifyAllResponse(receipt_ids=[receipt.id.value for receipt in receipts])
+
+
+def parse_ids(raw: str | None) -> frozenset[int] | None:
+    """Parse the `ids=1,2,3` query parameter; blank means no id filter."""
+    if raw is None or not raw.strip():
+        return None
+    try:
+        return frozenset(int(part.strip()) for part in raw.split(",") if part.strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="ids must be a comma-separated list of receipt ids",
+        ) from None
+
+
+# Declared before GET /receipts/{receipt_id} so `export.csv` is not swallowed
+# by the path parameter.
+@router.get(
+    "/export.csv",
+    response_class=Response,
+    responses={
+        200: {
+            "description": (
+                "The balancing export: one row per eligible approved personal-card "
+                "receipt. `;`-delimited comma-decimal CSV with a header row, or "
+                "headerless tab-separated TSV with `format=tsv`."
+            ),
+            "content": {
+                "text/csv": {"schema": {"type": "string", "format": "binary"}},
+                "text/tab-separated-values": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        422: {"model": ErrorResponse, "description": "Malformed selection parameters"},
+    },
+)
+async def export_receipts(
+    ids: Annotated[str | None, Query(description="Comma-separated receipt ids to include")] = None,
+    from_date: Annotated[
+        date | None, Query(alias="from", description="First receipt date, inclusive")
+    ] = None,
+    to_date: Annotated[
+        date | None, Query(alias="to", description="Last receipt date, inclusive")
+    ] = None,
+    format: Literal["csv", "tsv"] = "csv",
+    use_case: ExportReceiptsUseCase = Depends(
+        inject_use_case(container.receipts.export_receipts_use_case)
+    ),
+) -> Response:
+    """Download the balancing export, or its headerless TSV variant for Sheets.
+
+    Eligibility (approved, personal card, bookable currency, at least one item
+    with a flatmate share) is always applied; the selection only narrows it.
+    """
+    rows = await use_case.export_receipts(ids=parse_ids(ids), from_date=from_date, to_date=to_date)
+    if format == "tsv":
+        return Response(
+            content=render_tsv(rows),
+            media_type="text/tab-separated-values",
+            headers={"Content-Disposition": 'attachment; filename="receipts-export.tsv"'},
+        )
+    return Response(
+        content=render_csv(rows),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="receipts-export.csv"'},
+    )
 
 
 @router.get("/{receipt_id}", response_model=Receipt, responses=ERRORS)
