@@ -9,7 +9,7 @@ import { useGetReceipt } from '@/api/generated/receipts/receipts';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { DocumentPreview } from '@/components/common/DocumentPreview';
 import { PageHeader } from '@/components/common/PageHeader';
-import { StatusBadge } from '@/components/common/StatusBadge';
+import { BookedBadge, StatusBadge } from '@/components/common/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useReceiptMutations } from '@/hooks/useReceipts';
@@ -142,6 +142,7 @@ export function ReceiptPage({ receiptId }: { receiptId: number }) {
         description={
           <span className="flex flex-wrap items-center gap-2">
             <StatusBadge status={receipt.status} />
+            {approved && <BookedBadge booked={receipt.booked ?? false} />}
             <span>
               {receipt.parsed_by === 'user' ? 'Entered by hand' : `Read by ${receipt.parsed_by}`} ·{' '}
               {formatDateTime(receipt.created_at)}

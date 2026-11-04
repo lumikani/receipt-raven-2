@@ -1,12 +1,17 @@
 import { http, HttpResponse } from 'msw';
 
 import type {
+  AccountRolesResponse,
+  AccountShareDefault,
+  ClassificationRule,
+  ClassificationRuleRequest,
   Job,
   LedgerAccount,
   Receipt,
   ReceiptRequest,
   ReceiptSummary,
 } from '@/api/generated/model';
+import { normalizeName } from '@/lib/classification';
 
 /**
  * An in-memory Receipt Raven API, so a test can approve a receipt or retry a
@@ -20,6 +25,11 @@ interface State {
   ledgerRejection: string | null;
   approvals: { receiptId: number; body: ReceiptRequest }[];
   uploads: { name: string; type: string; size: number }[];
+  rules: ClassificationRule[];
+  shareDefaults: AccountShareDefault[];
+  accountRoles: AccountRolesResponse;
+  createdRules: ClassificationRuleRequest[];
+  reclassifications: number[];
 }
 
 const fresh = (): State => ({
@@ -29,6 +39,11 @@ const fresh = (): State => ({
   ledgerRejection: null,
   approvals: [],
   uploads: [],
+  rules: [],
+  shareDefaults: [],
+  accountRoles: defaultAccountRoles(),
+  createdRules: [],
+  reclassifications: [],
 });
 
 let state = fresh();
@@ -42,6 +57,8 @@ export const recorded = {
   approvals: () => state.approvals,
   uploads: () => state.uploads,
   receipts: () => state.receipts,
+  createdRules: () => state.createdRules,
+  reclassifications: () => state.reclassifications,
 };
 
 /** Make the next approvals fail the way a ledger rejection does. */
@@ -52,12 +69,64 @@ export function rejectApprovals(reason: string) {
 const ACCOUNTS: LedgerAccount[] = [
   { name: 'Assets:Checking', type: 'Assets' },
   { name: 'Liabilities:CreditCard', type: 'Liabilities' },
+  { name: 'Liabilities:SharedAccount', type: 'Liabilities' },
   { name: 'Expenses:Groceries', type: 'Expenses' },
   { name: 'Expenses:Office', type: 'Expenses' },
   { name: 'Expenses:Clothes', type: 'Expenses' },
+  { name: 'Expenses:Unallocated', type: 'Expenses' },
+  { name: 'Expenses:PurchaseForFlatmate', type: 'Expenses' },
+  { name: 'Expenses:FlatmateAdjustment', type: 'Expenses' },
 ];
 
-type ItemSeed = [name: string, account: string, price: number];
+function defaultAccountRoles(): AccountRolesResponse {
+  return {
+    personal_cards: ['Assets:Checking', 'Liabilities:CreditCard'],
+    shared_card: 'Liabilities:SharedAccount',
+    flatmate_expense_adjustment: 'Expenses:FlatmateAdjustment',
+    purchase_for_flatmate: 'Expenses:PurchaseForFlatmate',
+    unallocated_account: 'Expenses:Unallocated',
+  };
+}
+
+/** Seed one classification rule; the normalized pattern is computed like the backend's. */
+export function seedRule(
+  overrides: Partial<ClassificationRule> & { pattern: string }
+): ClassificationRule {
+  const { pattern, ...fields } = overrides;
+  const rule: ClassificationRule = {
+    id: state.nextId++,
+    pattern,
+    normalized_pattern: normalizeName(pattern),
+    max_typos: 1,
+    expense_account: 'Expenses:Groceries',
+    flatmate_share_override: null,
+    enabled: true,
+    created_at: '2026-10-01T08:00:00Z',
+    ...fields,
+  };
+  state.rules.push(rule);
+  return rule;
+}
+
+export function seedShareDefault(expense_account: string, share: number): AccountShareDefault {
+  const entry: AccountShareDefault = {
+    id: state.nextId++,
+    expense_account,
+    share,
+    created_at: '2026-10-01T08:00:00Z',
+  };
+  state.shareDefaults.push(entry);
+  return entry;
+}
+
+type ItemSeed = [
+  name: string,
+  account: string,
+  price: number,
+  share?: number,
+  matchedRuleId?: number | null,
+  overridden?: boolean,
+];
 
 export function seedReceipt(
   overrides: Partial<Receipt> & { itemSeeds?: ItemSeed[] } = {}
@@ -65,11 +134,21 @@ export function seedReceipt(
   const { itemSeeds, ...fields } = overrides;
   const id = state.nextId++;
   const items = (itemSeeds ?? [['Maito', 'Expenses:Groceries', 2.5]]).map(
-    ([name, expense_account, price]) => ({
+    ([
+      name,
+      expense_account,
+      price,
+      flatmate_share = 0,
+      matched_rule_id = null,
+      classification_overridden = false,
+    ]) => ({
       id: state.nextId++,
       name,
       expense_account,
       price,
+      flatmate_share,
+      matched_rule_id,
+      classification_overridden,
     })
   );
   const receipt: Receipt = {
@@ -80,6 +159,7 @@ export function seedReceipt(
     total_sum: items.reduce((sum, item) => sum + item.price, 0),
     currency: 'EUR',
     status: 'unapproved',
+    booked: false,
     source_account: 'Assets:Checking',
     parsed_by: 'anthropic/claude-haiku-4.5',
     items,
@@ -120,6 +200,7 @@ function summary(receipt: Receipt): ReceiptSummary {
     total_sum: receipt.total_sum,
     currency: receipt.currency,
     status: receipt.status,
+    booked: receipt.booked ?? false,
     source_account: receipt.source_account,
     item_count: receipt.items.length,
     has_ocr_issues: Boolean(receipt.ocr_notes?.suspicious_date),
@@ -134,6 +215,7 @@ function page<T>(items: T[], url: URL) {
 }
 
 function applyRequest(receipt: Receipt, body: ReceiptRequest): Receipt {
+  const existing = new Map(receipt.items.map((item) => [item.id, item]));
   return {
     ...receipt,
     payee: body.payee,
@@ -142,13 +224,54 @@ function applyRequest(receipt: Receipt, body: ReceiptRequest): Receipt {
     date: body.date,
     total_sum: body.total_sum,
     currency: body.currency ?? 'EUR',
-    items: body.items.map((item) => ({
-      id: item.id ?? state.nextId++,
-      name: item.name,
-      expense_account: item.expense_account ?? '',
-      price: item.price,
-    })),
+    items: body.items.map((item) => {
+      const before = item.id != null ? existing.get(item.id) : undefined;
+      // Editing the account or share is a manual override, like the backend.
+      const overridden =
+        (before?.classification_overridden ?? false) ||
+        (before !== undefined &&
+          ((item.expense_account ?? '') !== before.expense_account ||
+            (item.flatmate_share ?? 0) !== (before.flatmate_share ?? 0)));
+      return {
+        id: item.id ?? state.nextId++,
+        name: item.name,
+        expense_account: item.expense_account ?? before?.expense_account ?? '',
+        price: item.price,
+        flatmate_share: item.flatmate_share ?? before?.flatmate_share ?? 0,
+        matched_rule_id: overridden ? null : (before?.matched_rule_id ?? null),
+        classification_overridden: overridden,
+      };
+    }),
   };
+}
+
+/** The fake rule engine: exact normalized match against the enabled rules. */
+function reclassify(receipt: Receipt): Receipt {
+  const defaults = new Map(
+    state.shareDefaults.map((entry) => [entry.expense_account, entry.share])
+  );
+  const items = receipt.items.map((item) => {
+    if (item.classification_overridden) return item;
+    const normalized = normalizeName(item.name);
+    const rule = state.rules.find(
+      (candidate) => candidate.enabled && candidate.normalized_pattern === normalized
+    );
+    if (!rule) {
+      return {
+        ...item,
+        expense_account: item.expense_account || state.accountRoles.unallocated_account,
+        flatmate_share: defaults.get(item.expense_account) ?? 0,
+        matched_rule_id: null,
+      };
+    }
+    return {
+      ...item,
+      expense_account: rule.expense_account,
+      flatmate_share: rule.flatmate_share_override ?? defaults.get(rule.expense_account) ?? 0,
+      matched_rule_id: rule.id,
+    };
+  });
+  return { ...receipt, items };
 }
 
 function replaceReceipt(receipt: Receipt) {
@@ -224,6 +347,15 @@ export const fakeApiHandlers = [
     return state.receipts.length < before ? new HttpResponse(null, { status: 204 }) : notFound();
   }),
 
+  http.post('/api/v1/receipts/:id/reclassify', ({ params }) => {
+    const receipt = state.receipts.find((r) => r.id === Number(params.id));
+    if (!receipt) return notFound();
+    state.reclassifications.push(receipt.id);
+    const reclassified = reclassify(receipt);
+    replaceReceipt(reclassified);
+    return HttpResponse.json(reclassified);
+  }),
+
   http.get('/api/v1/ledger/accounts', ({ request }) => {
     const types = new URL(request.url).searchParams.getAll('type');
     const items = ACCOUNTS.filter((account) => types.length === 0 || types.includes(account.type));
@@ -232,6 +364,31 @@ export const fakeApiHandlers = [
 
   http.get('/api/v1/ledger/payees', () =>
     HttpResponse.json({ items: ['Alko', 'K-Market', 'Prisma'] })
+  ),
+
+  http.get('/api/v1/ledger/account-roles', () => HttpResponse.json(state.accountRoles)),
+
+  http.get('/api/v1/classification/rules', () => HttpResponse.json({ items: state.rules })),
+
+  http.post('/api/v1/classification/rules', async ({ request }) => {
+    const body = (await request.json()) as ClassificationRuleRequest;
+    state.createdRules.push(body);
+    const rule: ClassificationRule = {
+      id: state.nextId++,
+      pattern: body.pattern,
+      normalized_pattern: normalizeName(body.pattern),
+      max_typos: body.max_typos ?? 1,
+      expense_account: body.expense_account,
+      flatmate_share_override: body.flatmate_share_override ?? null,
+      enabled: body.enabled ?? true,
+      created_at: '2026-10-09T08:00:00Z',
+    };
+    state.rules.push(rule);
+    return HttpResponse.json(rule, { status: 201 });
+  }),
+
+  http.get('/api/v1/classification/account-share-defaults', () =>
+    HttpResponse.json({ items: state.shareDefaults })
   ),
 
   http.get('/api/v1/jobs', ({ request }) =>
