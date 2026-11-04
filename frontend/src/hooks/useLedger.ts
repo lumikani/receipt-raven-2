@@ -1,7 +1,11 @@
-import { useListLedgerAccounts, useListLedgerPayees } from '@/api/generated/ledger/ledger';
+import {
+  useGetAccountRoles,
+  useListLedgerAccounts,
+  useListLedgerPayees,
+} from '@/api/generated/ledger/ledger';
 import type { ListLedgerAccountsParams } from '@/api/generated/model';
 
-/** Accounts change rarely: keep them for an hour instead of refetching per page. */
+/** Accounts and roles change rarely: keep them for an hour instead of refetching per page. */
 const LEDGER_CACHE = { staleTime: 60 * 60 * 1000, gcTime: 60 * 60 * 1000 } as const;
 
 function useAccountNames(params: ListLedgerAccountsParams) {
@@ -26,4 +30,10 @@ export function useExpenseAccounts() {
 export function usePayees() {
   const query = useListLedgerPayees({ query: LEDGER_CACHE });
   return query.data?.items ?? [];
+}
+
+/** The configured source-account roles behind the routing preview and role flags. */
+export function useAccountRoles() {
+  const query = useGetAccountRoles({ query: LEDGER_CACHE });
+  return { roles: query.data, isLoading: query.isPending, loadFailed: query.isError };
 }
