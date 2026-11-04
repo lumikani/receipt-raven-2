@@ -882,6 +882,38 @@
         }
       }
     },
+    "/api/v1/ledger/account-roles": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "Get Account Roles",
+        "description": "The configured account roles; configuration, not the ledger, so no 502.",
+        "operationId": "get_account_roles",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRolesResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The ledger is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/classification/rules": {
       "get": {
         "tags": [
@@ -1499,6 +1531,64 @@
   },
   "components": {
     "schemas": {
+      "AccountRolesResponse": {
+        "properties": {
+          "personal_cards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Personal Cards"
+          },
+          "shared_card": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Card"
+          },
+          "flatmate_expense_adjustment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flatmate Expense Adjustment"
+          },
+          "purchase_for_flatmate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purchase For Flatmate"
+          },
+          "unallocated_account": {
+            "type": "string",
+            "title": "Unallocated Account"
+          }
+        },
+        "type": "object",
+        "required": [
+          "personal_cards",
+          "shared_card",
+          "flatmate_expense_adjustment",
+          "purchase_for_flatmate",
+          "unallocated_account"
+        ],
+        "title": "AccountRolesResponse",
+        "description": "The configured source-account roles, for the review screen's routing preview.\n\nNull fields mean \"not configured\"; an empty `personal_cards` with a null\n`shared_card` routes every source account as a personal card."
+      },
       "AccountShareDefault": {
         "properties": {
           "id": {

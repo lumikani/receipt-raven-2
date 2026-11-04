@@ -19,6 +19,7 @@ import {
 
 import { axiosInstance } from '../../axios-instance.ts';
 import type {
+  AccountRolesResponse,
   CollectionResponseLedgerAccount,
   CollectionResponseStr,
   ErrorResponse,
@@ -251,6 +252,110 @@ export function useListLedgerPayees<
   queryClient?: QueryClient
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getListLedgerPayeesQueryOptions(options);
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>;
+  };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+/**
+ * The configured account roles; configuration, not the ledger, so no 502.
+ * @summary Get Account Roles
+ */
+export const getAccountRoles = (signal?: AbortSignal) => {
+  return axiosInstance<AccountRolesResponse>({
+    url: `/api/v1/ledger/account-roles`,
+    method: 'GET',
+    signal,
+  });
+};
+
+export const getGetAccountRolesQueryKey = () => {
+  return [`/api/v1/ledger/account-roles`] as const;
+};
+
+export const getGetAccountRolesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAccountRoles>>,
+  TError = ErrorResponse,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountRoles>>, TError, TData>>;
+}) => {
+  const { query: queryOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAccountRolesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAccountRoles>>> = ({ signal }) =>
+    getAccountRoles(signal);
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAccountRoles>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
+};
+
+export type GetAccountRolesQueryResult = NonNullable<Awaited<ReturnType<typeof getAccountRoles>>>;
+export type GetAccountRolesQueryError = ErrorResponse;
+
+export function useGetAccountRoles<
+  TData = Awaited<ReturnType<typeof getAccountRoles>>,
+  TError = ErrorResponse,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountRoles>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAccountRoles>>,
+          TError,
+          Awaited<ReturnType<typeof getAccountRoles>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAccountRoles<
+  TData = Awaited<ReturnType<typeof getAccountRoles>>,
+  TError = ErrorResponse,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountRoles>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAccountRoles>>,
+          TError,
+          Awaited<ReturnType<typeof getAccountRoles>>
+        >,
+        'initialData'
+      >;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+export function useGetAccountRoles<
+  TData = Awaited<ReturnType<typeof getAccountRoles>>,
+  TError = ErrorResponse,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountRoles>>, TError, TData>>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+/**
+ * @summary Get Account Roles
+ */
+
+export function useGetAccountRoles<
+  TData = Awaited<ReturnType<typeof getAccountRoles>>,
+  TError = ErrorResponse,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getAccountRoles>>, TError, TData>>;
+  },
+  queryClient?: QueryClient
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetAccountRolesQueryOptions(options);
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>;

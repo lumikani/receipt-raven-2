@@ -30,7 +30,12 @@ class RootContainer(containers.DeclarativeContainer):
         document_storage=shared.document_storage,
         uploads_cleanup=shared.uploads_cleanup,
     )
-    ledger = providers.Container(LedgerContainer, ledger_service=shared.ledger_service)
+    ledger = providers.Container(
+        LedgerContainer,
+        ledger_service=shared.ledger_service,
+        account_roles=shared.account_roles,
+        settings=settings,
+    )
     classification = providers.Container(
         ClassificationContainer,
         classification_rule_repository=shared.classification_rule_repository,
