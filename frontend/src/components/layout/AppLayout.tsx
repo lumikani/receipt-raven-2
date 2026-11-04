@@ -1,5 +1,5 @@
 import { Link, Outlet } from '@tanstack/react-router';
-import { Camera, ListChecks, ReceiptText, type LucideIcon } from 'lucide-react';
+import { Camera, ListChecks, ListFilter, ReceiptText, type LucideIcon } from 'lucide-react';
 
 import { useUnapprovedCount } from '@/hooks/useReceipts';
 import { APP_NAME, BUILD_INFO } from '@/lib/appInfo';
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 
 interface NavItem {
-  to: '/' | '/upload' | '/jobs';
+  to: '/' | '/upload' | '/jobs' | '/rules';
   label: string;
   icon: LucideIcon;
 }
@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Receipts', icon: ReceiptText },
   { to: '/upload', label: 'Upload', icon: Camera },
   { to: '/jobs', label: 'Analysis queue', icon: ListChecks },
+  { to: '/rules', label: 'Rules', icon: ListFilter },
 ];
 
 function CountBadge({ count }: { count: number | undefined }) {
@@ -84,7 +85,7 @@ export function AppLayout() {
 
       <nav
         aria-label="Main mobile"
-        className="bg-background/95 fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="bg-background/95 fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
           <Link
