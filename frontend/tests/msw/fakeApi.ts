@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import type {
   AccountRolesResponse,
   AccountShareDefault,
+  AccountShareDefaultRequest,
   ClassificationRule,
   ClassificationRuleRequest,
   Job,
@@ -10,6 +11,7 @@ import type {
   Receipt,
   ReceiptRequest,
   ReceiptSummary,
+  SetRuleEnabledRequest,
 } from '@/api/generated/model';
 import { normalizeName } from '@/lib/classification';
 
@@ -29,6 +31,11 @@ interface State {
   shareDefaults: AccountShareDefault[];
   accountRoles: AccountRolesResponse;
   createdRules: ClassificationRuleRequest[];
+  updatedRules: { ruleId: number; body: ClassificationRuleRequest }[];
+  deletedRuleIds: number[];
+  enabledChanges: { ruleId: number; enabled: boolean }[];
+  shareDefaultUpserts: AccountShareDefaultRequest[];
+  deletedShareDefaults: string[];
   reclassifications: number[];
 }
 
@@ -43,6 +50,11 @@ const fresh = (): State => ({
   shareDefaults: [],
   accountRoles: defaultAccountRoles(),
   createdRules: [],
+  updatedRules: [],
+  deletedRuleIds: [],
+  enabledChanges: [],
+  shareDefaultUpserts: [],
+  deletedShareDefaults: [],
   reclassifications: [],
 });
 
@@ -58,6 +70,11 @@ export const recorded = {
   uploads: () => state.uploads,
   receipts: () => state.receipts,
   createdRules: () => state.createdRules,
+  updatedRules: () => state.updatedRules,
+  deletedRuleIds: () => state.deletedRuleIds,
+  enabledChanges: () => state.enabledChanges,
+  shareDefaultUpserts: () => state.shareDefaultUpserts,
+  deletedShareDefaults: () => state.deletedShareDefaults,
   reclassifications: () => state.reclassifications,
 };
 
@@ -294,6 +311,16 @@ const PIXEL = Uint8Array.from(
   (char) => char.charCodeAt(0)
 );
 
+// Like the backend, a normalized pattern must be unique across rules.
+const duplicatePattern = (normalized: string, exceptId: number | null) =>
+  state.rules.some((rule) => rule.normalized_pattern === normalized && rule.id !== exceptId);
+
+const conflict = () =>
+  HttpResponse.json(
+    { error: 'conflict', message: 'A rule with this normalized pattern already exists.' },
+    { status: 409 }
+  );
+
 export const fakeApiHandlers = [
   http.get('/api/v1/receipts', ({ request }) => {
     const url = new URL(request.url);
@@ -372,11 +399,13 @@ export const fakeApiHandlers = [
 
   http.post('/api/v1/classification/rules', async ({ request }) => {
     const body = (await request.json()) as ClassificationRuleRequest;
+    const normalized = normalizeName(body.pattern);
+    if (duplicatePattern(normalized, null)) return conflict();
     state.createdRules.push(body);
     const rule: ClassificationRule = {
       id: state.nextId++,
       pattern: body.pattern,
-      normalized_pattern: normalizeName(body.pattern),
+      normalized_pattern: normalized,
       max_typos: body.max_typos ?? 1,
       expense_account: body.expense_account,
       flatmate_share_override: body.flatmate_share_override ?? null,
@@ -387,9 +416,83 @@ export const fakeApiHandlers = [
     return HttpResponse.json(rule, { status: 201 });
   }),
 
+  http.put('/api/v1/classification/rules/:id', async ({ params, request }) => {
+    const ruleId = Number(params.id);
+    const rule = state.rules.find((candidate) => candidate.id === ruleId);
+    if (!rule) return notFound();
+    const body = (await request.json()) as ClassificationRuleRequest;
+    const normalized = normalizeName(body.pattern);
+    if (duplicatePattern(normalized, ruleId)) return conflict();
+    state.updatedRules.push({ ruleId, body });
+    const updated: ClassificationRule = {
+      ...rule,
+      pattern: body.pattern,
+      normalized_pattern: normalized,
+      max_typos: body.max_typos ?? rule.max_typos,
+      expense_account: body.expense_account,
+      flatmate_share_override: body.flatmate_share_override ?? null,
+      enabled: body.enabled ?? rule.enabled,
+    };
+    state.rules = state.rules.map((candidate) => (candidate.id === ruleId ? updated : candidate));
+    return HttpResponse.json(updated);
+  }),
+
+  http.post('/api/v1/classification/rules/:id/set-enabled', async ({ params, request }) => {
+    const ruleId = Number(params.id);
+    const rule = state.rules.find((candidate) => candidate.id === ruleId);
+    if (!rule) return notFound();
+    const body = (await request.json()) as SetRuleEnabledRequest;
+    state.enabledChanges.push({ ruleId, enabled: body.enabled });
+    const updated: ClassificationRule = { ...rule, enabled: body.enabled };
+    state.rules = state.rules.map((candidate) => (candidate.id === ruleId ? updated : candidate));
+    return HttpResponse.json(updated);
+  }),
+
+  http.delete('/api/v1/classification/rules/:id', ({ params }) => {
+    const ruleId = Number(params.id);
+    if (!state.rules.some((rule) => rule.id === ruleId)) return notFound();
+    state.deletedRuleIds.push(ruleId);
+    state.rules = state.rules.filter((rule) => rule.id !== ruleId);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   http.get('/api/v1/classification/account-share-defaults', () =>
     HttpResponse.json({ items: state.shareDefaults })
   ),
+
+  http.put('/api/v1/classification/account-share-defaults', async ({ request }) => {
+    const body = (await request.json()) as AccountShareDefaultRequest;
+    state.shareDefaultUpserts.push(body);
+    const existing = state.shareDefaults.find(
+      (entry) => entry.expense_account === body.expense_account
+    );
+    if (existing) {
+      const updated: AccountShareDefault = { ...existing, share: body.share };
+      state.shareDefaults = state.shareDefaults.map((entry) =>
+        entry.expense_account === body.expense_account ? updated : entry
+      );
+      return HttpResponse.json(updated);
+    }
+    const created: AccountShareDefault = {
+      id: state.nextId++,
+      expense_account: body.expense_account,
+      share: body.share,
+      created_at: '2026-10-09T08:00:00Z',
+    };
+    state.shareDefaults.push(created);
+    return HttpResponse.json(created);
+  }),
+
+  http.delete('/api/v1/classification/account-share-defaults/:expenseAccount', ({ params }) => {
+    const expenseAccount = String(params.expenseAccount);
+    if (!state.shareDefaults.some((entry) => entry.expense_account === expenseAccount))
+      return notFound();
+    state.deletedShareDefaults.push(expenseAccount);
+    state.shareDefaults = state.shareDefaults.filter(
+      (entry) => entry.expense_account !== expenseAccount
+    );
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   http.get('/api/v1/jobs', ({ request }) =>
     HttpResponse.json(page(state.jobs, new URL(request.url)))

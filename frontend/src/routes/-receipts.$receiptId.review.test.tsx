@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { renderApp } from '@tests/harness/renderApp';
+import { fillRuleDialog } from '@tests/harness/ruleDialog';
 import { recorded, seedReceipt, seedRule, seedShareDefault } from '@tests/msw/fakeApi';
 
 const pathOf = (id: number) => `/receipts/${id}`;
@@ -63,11 +64,7 @@ describe('the review screen’s classification rows', () => {
       .element(dialog.getByRole('textbox', { name: 'Pattern (normalized product name)' }))
       .toHaveValue('thunder sour apple 0 5 l');
 
-    await dialog.getByRole('combobox', { name: 'Rule expense account' }).click();
-    await screen.getByRole('option', { name: 'Expenses:Office' }).click();
-    await dialog
-      .getByRole('spinbutton', { name: 'Flatmate share override (blank = account default)' })
-      .fill('25');
+    await fillRuleDialog(screen, { account: 'Expenses:Office', share: '25' });
     await dialog.getByRole('button', { name: 'Save rule' }).click();
 
     await expect
