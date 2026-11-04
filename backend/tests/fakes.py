@@ -9,6 +9,7 @@ from src.application.analysis.protocols.receipt_analyzer import (
     ReceiptAnalysisError,
 )
 from src.domain.ledger.account import AccountType, LedgerAccount
+from src.domain.ledger.account_roles import AccountRoles
 from src.domain.ledger.exceptions import LedgerRejectedTransactionError, LedgerUnavailableError
 from src.domain.ledger.receipt_transaction import ReceiptTransaction
 
@@ -48,6 +49,16 @@ class FakeLedger:
         if self.reject_with is not None:
             raise LedgerRejectedTransactionError(self.reject_with)
         self.submitted.append(transaction)
+
+
+@dataclass
+class FakeAccountRoles:
+    """Supplies fixed source-account roles to the use cases under test."""
+
+    roles: AccountRoles = field(default_factory=AccountRoles)
+
+    def load(self) -> AccountRoles:
+        return self.roles
 
 
 def analysis(

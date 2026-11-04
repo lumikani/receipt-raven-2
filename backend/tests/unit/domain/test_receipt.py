@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from src.domain.common.value_objects import ReceiptItemId
-from src.domain.receipts.entities.receipt import Receipt, ReceiptLine
+from src.domain.receipts.entities.receipt import Receipt, ReceiptLine, ReceiptStatus
 from src.domain.receipts.exceptions import ReceiptNotApprovableError
 
 
@@ -35,7 +35,17 @@ def test_balance_is_checked_to_the_cent(
 
 def test_unbalanced_receipt_cannot_be_approved() -> None:
     with pytest.raises(ReceiptNotApprovableError):
-        receipt(10.0, 9.0).approve()
+        receipt(10.0, 9.0).approve(booked=True)
+
+
+def test_approve_records_whether_a_ledger_entry_was_written() -> None:
+    not_booked = receipt(10.0, 10.0)
+    not_booked.approve(booked=False)
+    booked = receipt(10.0, 10.0)
+    booked.approve(booked=True)
+
+    assert (not_booked.status, not_booked.booked) == (ReceiptStatus.APPROVED, False)
+    assert (booked.status, booked.booked) == (ReceiptStatus.APPROVED, True)
 
 
 def test_replace_items_ignores_ids_the_receipt_does_not_have() -> None:

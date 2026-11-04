@@ -361,10 +361,15 @@ class Receipt(AggregateRoot[ReceiptId]):
                 f"but the total is {self.total_sum:.2f} {self.currency}"
             )
 
-    def approve(self) -> None:
-        """Mark the receipt as written to the ledger."""
+    def approve(self, *, booked: bool) -> None:
+        """Mark the receipt approved, recording whether a ledger entry was written.
+
+        `booked` is True only after a successful ledger submit; a shared-card
+        receipt whose rows are all shared is approved without being booked.
+        """
         self.ensure_approvable()
         self.status = ReceiptStatus.APPROVED
+        self.booked = booked
 
     def _ensure_editable(self) -> None:
         if self.is_approved:

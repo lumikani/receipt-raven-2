@@ -35,6 +35,7 @@ class ReceiptsContainer(containers.DeclarativeContainer):
         ApproveReceiptUseCase,
         receipt_repository=receipt_repository,
         ledger_service=ledger_service,
+        account_roles=account_roles,
     )
     delete_receipt_use_case = providers.Factory(
         DeleteReceiptUseCase, receipt_repository=receipt_repository

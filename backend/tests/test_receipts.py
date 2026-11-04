@@ -4,9 +4,17 @@ from typing import Any
 
 from httpx import AsyncClient
 
-from tests.fakes import FakeLedger
+from src.domain.ledger.account_roles import AccountRoles
+from tests.fakes import FakeAccountRoles, FakeLedger
 
 RECEIPTS = "/api/v1/receipts"
+
+SHARED_ROLES = AccountRoles(
+    personal_cards=("Assets:Checking",),
+    shared_card="Liabilities:Shared",
+    flatmate_expense_adjustment="Expenses:FlatmateAdjustment",
+    purchase_for_flatmate="Expenses:PurchaseForFlatmate",
+)
 
 
 def receipt_body(**overrides: object) -> dict[str, Any]:
@@ -232,8 +240,13 @@ class TestApproveReceipt:
             "error": "bad_gateway",
             "message": "The ledger rejected the receipt: Accounts not found: Assets:Checking",
         }
+        assert ledger.submitted == []
         fetched = (await client.get(f"{RECEIPTS}/{created['id']}")).json()
-        assert (fetched["status"], fetched["payee"]) == ("unapproved", "Edited")
+        assert (fetched["status"], fetched["booked"], fetched["payee"]) == (
+            "unapproved",
+            False,
+            "Edited",
+        )
 
     async def test_unavailable_ledger_is_reported(
         self, client: AsyncClient, ledger: FakeLedger
@@ -245,11 +258,129 @@ class TestApproveReceipt:
 
         assert response.status_code == 502
         assert "not available" in response.json()["message"]
+        assert ledger.submitted == []
+        fetched = (await client.get(f"{RECEIPTS}/{created['id']}")).json()
+        assert (fetched["status"], fetched["booked"]) == ("unapproved", False)
+
+    async def test_a_rejected_approval_can_be_retried_and_then_books(
+        self, client: AsyncClient, ledger: FakeLedger
+    ) -> None:
+        created = await create_receipt(client)
+        ledger.reject_with = "Accounts not found: Assets:Checking"
+        await client.post(f"{RECEIPTS}/{created['id']}/approve", json=receipt_body())
+
+        ledger.reject_with = None
+        response = await client.post(f"{RECEIPTS}/{created['id']}/approve", json=receipt_body())
+
+        assert response.status_code == 200, response.text
+        assert (response.json()["status"], response.json()["booked"]) == ("approved", True)
+        assert len(ledger.submitted) == 1
 
     async def test_unknown_receipt_is_not_found(self, client: AsyncClient) -> None:
         response = await client.post(f"{RECEIPTS}/999/approve", json=receipt_body())
 
         assert response.status_code == 404
+
+
+class TestApproveRouting:
+    """Approval routes by the source account's role and records `booked`."""
+
+    async def test_personal_card_receipt_books_one_entry_and_ends_approved_and_booked(
+        self, client: AsyncClient, ledger: FakeLedger, account_roles: FakeAccountRoles
+    ) -> None:
+        account_roles.roles = AccountRoles(personal_cards=("Assets:Checking",))
+        created = await create_receipt(client)
+
+        response = await client.post(f"{RECEIPTS}/{created['id']}/approve", json=receipt_body())
+
+        assert response.status_code == 200, response.text
+        assert (response.json()["status"], response.json()["booked"]) == ("approved", True)
+        [transaction] = ledger.submitted
+        assert transaction.source_account == "Assets:Checking"
+        assert transaction.total == 12.5
+        assert [(p.expense_account, p.name, p.price) for p in transaction.postings] == [
+            ("Expenses:Groceries", "Maito, Leipä", 5.5),
+            ("Expenses:Clothes", "Sukat", 7.0),
+        ]
+        detail = (await client.get(f"{RECEIPTS}/{created['id']}")).json()
+        assert (detail["status"], detail["booked"]) == ("approved", True)
+        row = (await client.get(RECEIPTS)).json()["items"][0]
+        assert (row["status"], row["booked"]) == ("approved", True)
+
+    async def test_shared_card_books_only_the_unshared_rows(
+        self, client: AsyncClient, ledger: FakeLedger, account_roles: FakeAccountRoles
+    ) -> None:
+        account_roles.roles = SHARED_ROLES
+        body = receipt_body(
+            source_account="Liabilities:Shared",
+            total_sum=12.0,
+            items=[
+                {"name": "Maito", "expense_account": "Expenses:Groceries", "price": 4.0},
+                {
+                    "name": "Pyyhe",
+                    "expense_account": "Expenses:Household",
+                    "price": 6.0,
+                    "flatmate_share": 100,
+                },
+                {
+                    "name": "Saippua",
+                    "expense_account": "Expenses:Groceries",
+                    "price": 2.0,
+                    "flatmate_share": 50,
+                },
+            ],
+        )
+        created = await create_receipt(client, **body)
+
+        response = await client.post(f"{RECEIPTS}/{created['id']}/approve", json=body)
+
+        assert response.status_code == 200, response.text
+        assert (response.json()["status"], response.json()["booked"]) == ("approved", True)
+        [transaction] = ledger.submitted
+        assert transaction.source_account == "Liabilities:Shared"
+        assert transaction.total == 12.0
+        assert [(p.expense_account, p.price) for p in transaction.postings] == [
+            ("Expenses:Groceries", 4.0),
+            ("Expenses:FlatmateAdjustment", -6.0),
+            ("Liabilities:Shared", -4.0),
+            ("Liabilities:Shared", 6.0),
+        ]
+        detail = (await client.get(f"{RECEIPTS}/{created['id']}")).json()
+        assert (detail["status"], detail["booked"]) == ("approved", True)
+
+    async def test_shared_card_receipt_with_only_shared_rows_is_approved_but_not_booked(
+        self, client: AsyncClient, ledger: FakeLedger, account_roles: FakeAccountRoles
+    ) -> None:
+        account_roles.roles = SHARED_ROLES
+        body = receipt_body(
+            source_account="Liabilities:Shared",
+            total_sum=6.0,
+            items=[
+                {
+                    "name": "Saippua",
+                    "expense_account": "Expenses:Groceries",
+                    "price": 3.0,
+                    "flatmate_share": 50,
+                },
+                {
+                    "name": "Pyyhe",
+                    "expense_account": "Expenses:Household",
+                    "price": 3.0,
+                    "flatmate_share": 25,
+                },
+            ],
+        )
+        created = await create_receipt(client, **body)
+
+        response = await client.post(f"{RECEIPTS}/{created['id']}/approve", json=body)
+
+        assert response.status_code == 200, response.text
+        assert (response.json()["status"], response.json()["booked"]) == ("approved", False)
+        assert ledger.submitted == []
+        detail = (await client.get(f"{RECEIPTS}/{created['id']}")).json()
+        assert (detail["status"], detail["booked"]) == ("approved", False)
+        row = (await client.get(RECEIPTS)).json()["items"][0]
+        assert (row["status"], row["booked"]) == ("approved", False)
 
 
 class TestDeleteReceipt:
