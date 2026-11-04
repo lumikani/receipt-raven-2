@@ -2453,6 +2453,12 @@
             ],
             "title": "Source Account"
           },
+          "export_eligible": {
+            "type": "boolean",
+            "title": "Export Eligible",
+            "description": "True when the receipt gets a balancing-export row",
+            "default": false
+          },
           "item_count": {
             "type": "integer",
             "title": "Item Count"

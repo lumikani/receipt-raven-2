@@ -188,31 +188,38 @@ class TestSelection:
         assert response.text == HEADER + "4,00;10-02 In Maito, Pyyhe;6,00\r\n"
 
 
+async def seed_eligibility_mix(
+    client: AsyncClient, account_roles: FakeAccountRoles
+) -> dict[str, Any]:
+    """One receipt per eligibility exclusion, plus the one eligible receipt (returned)."""
+    account_roles.roles = SHARED_ROLES
+    await create_receipt(client, payee="Unapproved")  # would be eligible if approved
+    await create_and_approve(
+        client,
+        payee="NoShare",
+        items=[{"name": "Maito", "expense_account": "Expenses:Groceries", "price": 10.0}],
+    )
+    await create_and_approve(
+        client,
+        payee="SharedCard",
+        source_account="Liabilities:Shared",
+        items=[
+            {
+                "name": "Saippua",
+                "expense_account": "Expenses:Groceries",
+                "price": 10.0,
+                "flatmate_share": 50,
+            }
+        ],
+    )
+    return await create_and_approve(client, payee="Eligible")
+
+
 class TestEligibility:
     async def test_only_approved_personal_card_receipts_with_a_shared_item_are_exported(
         self, client: AsyncClient, account_roles: FakeAccountRoles
     ) -> None:
-        account_roles.roles = SHARED_ROLES
-        await create_receipt(client, payee="Unapproved")  # would be eligible if approved
-        await create_and_approve(
-            client,
-            payee="NoShare",
-            items=[{"name": "Maito", "expense_account": "Expenses:Groceries", "price": 10.0}],
-        )
-        await create_and_approve(
-            client,
-            payee="SharedCard",
-            source_account="Liabilities:Shared",
-            items=[
-                {
-                    "name": "Saippua",
-                    "expense_account": "Expenses:Groceries",
-                    "price": 10.0,
-                    "flatmate_share": 50,
-                }
-            ],
-        )
-        await create_and_approve(client, payee="Eligible")
+        await seed_eligibility_mix(client, account_roles)
 
         response = await client.get(EXPORT)
 
@@ -244,6 +251,26 @@ class TestEligibility:
         )
 
         assert (await client.get(EXPORT)).text == HEADER
+
+
+class TestListEligibility:
+    """The receipt list flags the export-eligible rows the export would include."""
+
+    async def test_list_marks_exactly_the_eligible_rows(
+        self, client: AsyncClient, account_roles: FakeAccountRoles
+    ) -> None:
+        mixed = await seed_eligibility_mix(client, account_roles)
+
+        listing = (await client.get(RECEIPTS)).json()
+        flags = {item["payee"]: item["export_eligible"] for item in listing["items"]}
+
+        assert flags == {
+            "Unapproved": False,
+            "NoShare": False,
+            "SharedCard": False,
+            "Eligible": True,
+        }
+        assert [item["id"] for item in listing["items"] if item["export_eligible"]] == [mixed["id"]]
 
 
 class TestRowComputation:

@@ -59,6 +59,9 @@ class ReceiptSummary(BaseModel):
     status: ReceiptStatusValue
     booked: bool = Field(False, description="True when approval wrote a ledger entry")
     source_account: str | None
+    export_eligible: bool = Field(
+        False, description="True when the receipt gets a balancing-export row"
+    )
     item_count: int
     has_ocr_issues: bool
     created_at: dt.datetime

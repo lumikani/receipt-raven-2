@@ -1,5 +1,6 @@
 from dependency_injector import containers, providers
 
+from src.application.receipts.commands.approve_receipt_use_case import BOOKABLE_CURRENCIES
 from src.infrastructure.analysis.analyzer_factory import build_receipt_analyzer
 from src.infrastructure.analysis.payee_account_rules_file import PayeeAccountRulesFile
 from src.infrastructure.classification.repositories.account_share_default_repository import (
@@ -35,7 +36,6 @@ class SharedContainer(containers.DeclarativeContainer):
     account_share_default_repository = providers.Factory(AccountShareDefaultRepository, db=db)
 
     # Query adapters (read models)
-    receipt_list_query = providers.Factory(ReceiptListQuery, db=db)
     job_list_query = providers.Factory(JobListQuery, db=db)
 
     # Services: stateless or process-wide, so one instance serves every request
@@ -53,3 +53,11 @@ class SharedContainer(containers.DeclarativeContainer):
         PayeeAccountRulesFile, path=settings.provided.PAYEE_ACCOUNT_RULES_PATH
     )
     account_roles = providers.Singleton(AccountRolesFile, path=settings.provided.ACCOUNT_ROLES_PATH)
+
+    # Needs account_roles, so it is declared after it.
+    receipt_list_query = providers.Factory(
+        ReceiptListQuery,
+        db=db,
+        account_roles=account_roles,
+        bookable_currencies=BOOKABLE_CURRENCIES,
+    )

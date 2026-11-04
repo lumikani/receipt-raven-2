@@ -50,11 +50,35 @@ def is_export_eligible(
     bookable_currencies: Container[str],
 ) -> bool:
     """Whether the receipt gets an export row (see the module docstring)."""
+    return export_eligibility(
+        is_approved=receipt.is_approved,
+        source_account=receipt.source_account,
+        currency=receipt.currency,
+        has_shared_item=any(item.flatmate_share > SHARE_MIN for item in receipt.items),
+        account_roles=account_roles,
+        bookable_currencies=bookable_currencies,
+    )
+
+
+def export_eligibility(
+    *,
+    is_approved: bool,
+    source_account: str | None,
+    currency: str,
+    has_shared_item: bool,
+    account_roles: AccountRoles,
+    bookable_currencies: Container[str],
+) -> bool:
+    """The eligibility rule on primitive fields, for readers without the items.
+
+    The receipt list shows which rows are exportable without loading every
+    item, so the rule lives here once and `is_export_eligible` delegates to it.
+    """
     return (
-        receipt.is_approved
-        and account_roles.role_of(receipt.source_account) is AccountRole.PERSONAL_CARD
-        and receipt.currency in bookable_currencies
-        and any(item.flatmate_share > SHARE_MIN for item in receipt.items)
+        is_approved
+        and account_roles.role_of(source_account) is AccountRole.PERSONAL_CARD
+        and currency in bookable_currencies
+        and has_shared_item
     )
 
 

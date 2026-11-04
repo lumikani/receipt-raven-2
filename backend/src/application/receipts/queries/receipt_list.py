@@ -27,6 +27,7 @@ class ReceiptListItemView:
     status: ReceiptStatus
     booked: bool
     source_account: str | None
+    export_eligible: bool
     item_count: int
     has_ocr_issues: bool
     created_at: datetime

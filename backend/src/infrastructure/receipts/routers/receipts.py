@@ -145,6 +145,7 @@ async def list_receipts(
                 status=view.status.value,
                 booked=view.booked,
                 source_account=view.source_account,
+                export_eligible=view.export_eligible,
                 item_count=view.item_count,
                 has_ocr_issues=view.has_ocr_issues,
                 created_at=view.created_at,
