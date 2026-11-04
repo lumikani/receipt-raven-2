@@ -17,6 +17,7 @@ from src.application.classification.protocols.receipt_classifier import (
 )
 from src.application.jobs.protocols.document_storage import DocumentStorageProtocol
 from src.application.jobs.protocols.receipt_job_repository import ReceiptJobRepositoryProtocol
+from src.application.ledger.protocols.account_roles import AccountRolesProviderProtocol
 from src.application.ledger.protocols.ledger_service import LedgerServiceProtocol
 from src.application.receipts.protocols.receipt_repository import ReceiptRepositoryProtocol
 from src.domain.jobs.entities.receipt_job import ReceiptJob
@@ -36,8 +37,9 @@ class ProcessNextJobUseCase:
     """Analyse the oldest waiting document and store the receipt it shows.
 
     The steps, in order: read the document, fetch the expense accounts the model
-    may choose from, analyse, flag a suspicious date, pick the source account by
-    the payee rules (falling back to the configured default), stamp every item
+    may choose from, analyse, flag a suspicious date, pick the source account —
+    by the card's last digits on the receipt when it shows one, otherwise by
+    the payee rules, last resort the configured default — stamp every item
     with the classification rules, store the receipt. Any failure is recorded
     on the job, which is retried until it runs out of attempts.
     """
@@ -51,6 +53,7 @@ class ProcessNextJobUseCase:
         receipt_analyzer: ReceiptAnalyzerProtocol,
         ledger_service: LedgerServiceProtocol,
         payee_account_rules: PayeeAccountRulesProviderProtocol,
+        account_roles: AccountRolesProviderProtocol,
         receipt_classifier: ReceiptClassifierProtocol,
         max_attempts: int,
         default_source_account: str | None,
@@ -62,6 +65,7 @@ class ProcessNextJobUseCase:
         self.receipt_analyzer = receipt_analyzer
         self.ledger_service = ledger_service
         self.payee_account_rules = payee_account_rules
+        self.account_roles = account_roles
         self.receipt_classifier = receipt_classifier
         self.max_attempts = max_attempts
         self.default_source_account = default_source_account
@@ -96,12 +100,33 @@ class ProcessNextJobUseCase:
         await self.receipt_classifier.stamp_receipt(receipt)
         return receipt
 
-    def _to_receipt(self, job: ReceiptJob, analysis: ReceiptAnalysis) -> Receipt:
-        today = self.today()
-        receipt_date = analysis.receipt_date or today
+    def _source_account(self, analysis: ReceiptAnalysis) -> str | None:
+        """Pick the source account: the card on the receipt, else the payee rules.
+
+        Card digits are authoritative when the receipt shows them: the payee
+        name says nothing about which card was used, so an unrecognized card
+        never falls back to the payee rules — only to the configured default.
+        """
+        if analysis.card_last_digits:
+            card_account = self.account_roles.load().source_account_for_card_digits(
+                analysis.card_last_digits
+            )
+            if card_account is not None:
+                logger.info(
+                    "card_digits_matched", digits=analysis.card_last_digits, account=card_account
+                )
+                return card_account
+            logger.info("card_digits_unmatched", digits=analysis.card_last_digits)
+            return self.default_source_account
         rule = self.payee_account_rules.load().source_account_for(analysis.payee)
         if rule is not None:
             logger.info("payee_rule_matched", payee=analysis.payee, account=rule.source_account)
+            return rule.source_account
+        return self.default_source_account
+
+    def _to_receipt(self, job: ReceiptJob, analysis: ReceiptAnalysis) -> Receipt:
+        today = self.today()
+        receipt_date = analysis.receipt_date or today
         return Receipt.create_from_analysis(
             job_id=job.id,
             document_filename=job.filename,
@@ -116,7 +141,7 @@ class ProcessNextJobUseCase:
             parsed_by=analysis.model,
             ocr_notes=run_heuristics(receipt_date, today),
             description=analysis.description,
-            source_account=rule.source_account if rule else self.default_source_account,
+            source_account=self._source_account(analysis),
             currency=analysis.currency,
             card_last_digits=analysis.card_last_digits,
         )

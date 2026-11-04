@@ -12,14 +12,34 @@ from httpx import AsyncClient
 from src.application.analysis.commands.process_next_job_use_case import local_today
 from src.containers import container
 from src.domain.jobs.entities.receipt_job import ReceiptJob
+from src.domain.ledger.account_roles import AccountRoles
 from src.infrastructure.analysis.payee_account_rules_file import PayeeAccountRulesFile
-from tests.fakes import FakeLedger, FakeReceiptAnalyzer, analysis
+from tests.fakes import FakeAccountRoles, FakeLedger, FakeReceiptAnalyzer, analysis
 
 JOBS = "/api/v1/jobs"
 RECEIPTS = "/api/v1/receipts"
 PHOTO = b"\xff\xd8\xff\xe0 fake jpeg"
 
 RunWorker = Callable[[], Awaitable[ReceiptJob | None]]
+
+
+def payee_rules_file(tmp_path: Path, *rules: dict[str, str]) -> Path:
+    """Write a payee-account-rules JSON file with the given rules."""
+    path = tmp_path / "payee-account-rules.json"
+    path.write_text(json.dumps({"rules": list(rules)}))
+    return path
+
+
+CARD_ROLES = AccountRoles(
+    personal_cards=("Liabilities:CreditCard",),
+    shared_card="Liabilities:SharedAccount",
+    flatmate_expense_adjustment="Expenses:FlatmateAdjustment",
+    purchase_for_flatmate="Expenses:PurchaseForFlatmate",
+    card_last_digits=(
+        ("9841", "Liabilities:CreditCard"),
+        ("0244", "Liabilities:SharedAccount"),
+    ),
+)
 
 
 async def upload(
@@ -129,16 +149,10 @@ class TestAnalysis:
         analyzer: FakeReceiptAnalyzer,
         tmp_path: Path,
     ) -> None:
-        rules_file = tmp_path / "payee-account-rules.json"
-        rules_file.write_text(
-            json.dumps(
-                {
-                    "rules": [
-                        {"payeePattern": ".*S-Market.*|.*Prisma.*", "sourceAccount": "Assets:Cash"},
-                        {"payeePattern": "prisma", "sourceAccount": "Assets:Never"},
-                    ]
-                }
-            )
+        rules_file = payee_rules_file(
+            tmp_path,
+            {"payeePattern": ".*S-Market.*|.*Prisma.*", "sourceAccount": "Assets:Cash"},
+            {"payeePattern": "prisma", "sourceAccount": "Assets:Never"},
         )
         analyzer.result = analysis(payee="PRISMA Kaleva")
         await upload(client)
@@ -149,6 +163,88 @@ class TestAnalysis:
             await run_worker()
 
         assert (await only_receipt(client))["source_account"] == "Assets:Cash"
+
+    async def test_card_last_digits_pick_the_source_account(
+        self,
+        client: AsyncClient,
+        run_worker: RunWorker,
+        analyzer: FakeReceiptAnalyzer,
+        account_roles: FakeAccountRoles,
+    ) -> None:
+        account_roles.roles = CARD_ROLES
+        analyzer.result = analysis(card_last_digits="9841")
+        await upload(client)
+
+        await run_worker()
+
+        receipt = await only_receipt(client)
+        assert receipt["source_account"] == "Liabilities:CreditCard"
+        assert receipt["card_last_digits"] == "9841"
+
+    async def test_card_last_digits_beat_the_payee_rules(
+        self,
+        client: AsyncClient,
+        run_worker: RunWorker,
+        analyzer: FakeReceiptAnalyzer,
+        account_roles: FakeAccountRoles,
+        tmp_path: Path,
+    ) -> None:
+        rules_file = payee_rules_file(
+            tmp_path, {"payeePattern": ".*", "sourceAccount": "Assets:Cash"}
+        )
+        account_roles.roles = CARD_ROLES
+        analyzer.result = analysis(payee="PRISMA Kaleva", card_last_digits="0244")
+        await upload(client)
+
+        with container.shared.payee_account_rules.override(
+            providers.Object(PayeeAccountRulesFile(rules_file))
+        ):
+            await run_worker()
+
+        assert (await only_receipt(client))["source_account"] == "Liabilities:SharedAccount"
+
+    async def test_unknown_card_digits_never_fall_back_to_the_payee_rules(
+        self,
+        client: AsyncClient,
+        run_worker: RunWorker,
+        analyzer: FakeReceiptAnalyzer,
+        account_roles: FakeAccountRoles,
+        tmp_path: Path,
+    ) -> None:
+        # The payee name says nothing about which card was used, so a receipt
+        # that shows an unrecognized card is not routed by the payee rules.
+        rules_file = payee_rules_file(
+            tmp_path, {"payeePattern": ".*", "sourceAccount": "Assets:Cash"}
+        )
+        account_roles.roles = CARD_ROLES
+        analyzer.result = analysis(payee="PRISMA Kaleva", card_last_digits="0000")
+        await upload(client)
+
+        with container.shared.payee_account_rules.override(
+            providers.Object(PayeeAccountRulesFile(rules_file))
+        ):
+            await run_worker()
+
+        receipt = await only_receipt(client)
+        assert receipt["source_account"] is None
+        assert receipt["card_last_digits"] == "0000"
+
+    async def test_unknown_card_digits_and_no_rules_leave_the_source_account_unset(
+        self,
+        client: AsyncClient,
+        run_worker: RunWorker,
+        analyzer: FakeReceiptAnalyzer,
+        account_roles: FakeAccountRoles,
+    ) -> None:
+        account_roles.roles = CARD_ROLES
+        analyzer.result = analysis(card_last_digits="0000")
+        await upload(client)
+
+        await run_worker()
+
+        receipt = await only_receipt(client)
+        assert receipt["source_account"] is None
+        assert receipt["card_last_digits"] == "0000"
 
     async def test_keeps_the_currency_the_receipt_is_in(
         self, client: AsyncClient, run_worker: RunWorker, analyzer: FakeReceiptAnalyzer

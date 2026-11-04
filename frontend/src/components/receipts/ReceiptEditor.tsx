@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, BookCheck, Loader2, RefreshCw, Save } from 'lucide-react';
+import { AlertTriangle, BookCheck, CreditCard, Loader2, RefreshCw, Save } from 'lucide-react';
 import { Controller, FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 
@@ -8,6 +8,7 @@ import { apiErrorMessage } from '@/api/errors';
 import type { OcrIssue, Receipt } from '@/api/generated/model';
 import { AmountInput } from '@/components/common/AmountInput';
 import { Combobox } from '@/components/common/Combobox';
+import { MaskedCard } from '@/components/common/MaskedCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,7 +70,13 @@ function DateWarning({ issue }: { issue: OcrIssue }) {
   );
 }
 
-function DetailsFields({ dateIssue }: { dateIssue: OcrIssue | null | undefined }) {
+function DetailsFields({
+  dateIssue,
+  cardLastDigits,
+}: {
+  dateIssue: OcrIssue | null | undefined;
+  cardLastDigits?: string | null;
+}) {
   const { control, register, formState } = useFormContext<ReceiptFormValues>();
   const sourceAccounts = useSourceAccounts();
   const payees = usePayees();
@@ -129,6 +136,12 @@ function DetailsFields({ dateIssue }: { dateIssue: OcrIssue | null | undefined }
           >
             <AlertTriangle className="size-3.5 shrink-0" />
             {sourceAccount} has no configured account role — treated as a personal card.
+          </p>
+        )}
+        {cardLastDigits && (
+          <p role="note" className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <CreditCard className="size-3.5 shrink-0" />
+            Card <MaskedCard digits={cardLastDigits} /> on the receipt
           </p>
         )}
       </Field>
@@ -318,7 +331,10 @@ export function ReceiptEditor({ receipt }: { receipt?: Receipt }) {
     <FormProvider {...form}>
       <form onSubmit={form.handleSubmit(submit)} noValidate aria-label="Receipt">
         <div className="flex flex-col gap-8">
-          <DetailsFields dateIssue={receipt?.ocr_notes?.suspicious_date} />
+          <DetailsFields
+            dateIssue={receipt?.ocr_notes?.suspicious_date}
+            cardLastDigits={receipt?.card_last_digits}
+          />
           <ReceiptItemsEditor showFlags={!!receipt} />
           {receipt && <RoutingPreview receiptId={receipt.id} />}
         </div>

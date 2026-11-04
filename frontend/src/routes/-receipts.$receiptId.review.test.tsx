@@ -113,6 +113,23 @@ describe('the review screen’s classification rows', () => {
   });
 });
 
+describe('the card read from the receipt', () => {
+  test('shows the last four digits next to Paid from on the review screen', async () => {
+    const receipt = seedReceipt({ card_last_digits: '9841' });
+    const { screen } = await renderApp({ path: pathOf(receipt.id) });
+
+    await expect.element(screen.getByText('Card •••• 9841 on the receipt')).toBeVisible();
+  });
+
+  test('shows the last four digits on the approved read-only view', async () => {
+    const receipt = seedReceipt({ status: 'approved', booked: true, card_last_digits: '0244' });
+    const { screen } = await renderApp({ path: pathOf(receipt.id) });
+
+    await expect.element(screen.getByText('Card')).toBeVisible();
+    await expect.element(screen.getByText('•••• 0244')).toBeVisible();
+  });
+});
+
 describe('the routing preview', () => {
   test('shows the personal-card ledger entry and CSV row approval will produce', async () => {
     const receipt = seedReceipt({

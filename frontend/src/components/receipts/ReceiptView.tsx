@@ -1,4 +1,5 @@
 import type { Receipt } from '@/api/generated/model';
+import { MaskedCard } from '@/components/common/MaskedCard';
 import { formatCurrency, formatDate } from '@/lib/format';
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -17,6 +18,11 @@ export function ReceiptView({ receipt }: { receipt: Receipt }) {
       <dl aria-label="Receipt details" className="grid gap-2 sm:grid-cols-2">
         <Detail label="Payee">{receipt.payee}</Detail>
         <Detail label="Paid from">{receipt.source_account ?? '—'}</Detail>
+        {receipt.card_last_digits && (
+          <Detail label="Card">
+            <MaskedCard digits={receipt.card_last_digits} />
+          </Detail>
+        )}
         <Detail label="Date">{formatDate(receipt.date)}</Detail>
         <Detail label="Total">
           <span className="font-semibold tabular-nums">

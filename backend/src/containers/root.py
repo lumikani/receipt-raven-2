@@ -60,5 +60,6 @@ class RootContainer(containers.DeclarativeContainer):
         receipt_analyzer=shared.receipt_analyzer,
         ledger_service=shared.ledger_service,
         payee_account_rules=shared.payee_account_rules,
+        account_roles=shared.account_roles,
         receipt_classifier=classification.receipt_classifier,
     )

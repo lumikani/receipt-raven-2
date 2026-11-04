@@ -53,15 +53,18 @@ pulled (`ollama pull richardyoung/lightonocr-3-4b:Q4_K_M`) listening on
 `localhost:11434`, and the `hledger` CLI installed.
 
 ```bash
-cp .env.example .env        # then edit .env:
+cp .env.example .env        # then edit .env (use absolute paths — `~` is not expanded):
 #   AI_PROVIDER=local
 #   LOCAL_BASE_URL=http://localhost:11434/v1
 #   LOCAL_MODEL=richardyoung/lightonocr-3-4b:Q4_K_M
 #   LEDGER_PROVIDER=hledger
-#   HLEDGER_FILE=~/.ledger/current.journal        # reads + validation
-#   HLEDGER_APPEND_FILE=~/.ledger/receipts.journal  # app-owned append target,
-#                                                   # included from the main journal
+#   HLEDGER_FILE=/home/you/.ledger/current.journal        # reads + validation
+#   HLEDGER_APPEND_FILE=/home/you/.ledger/receipts.journal  # app-owned append target,
+#                                                           # included from the main journal
 cp backend/config/account-roles.example.json backend/config/account-roles.json
+# then edit backend/config/account-roles.json: set the real last four digits of
+# each card in "cardLastDigits" (the digits printed on the receipt's `Kortti:`
+# line). The card that paid then picks the receipt's source account automatically.
 make migrate
 make dev-app        # backend on http://localhost:8000
 make dev-frontend   # frontend on http://localhost:5173

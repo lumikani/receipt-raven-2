@@ -10,6 +10,11 @@ ROLES = AccountRoles(
     shared_card="liabilities:personal:shared-account",
     flatmate_expense_adjustment="expenses:flatmate-expense-adjustment",
     purchase_for_flatmate="expenses:purchase-for-flatmate",
+    card_last_digits=(
+        ("1111", "liabilities:op:credit-card:gold"),
+        ("2222", "liabilities:op:credit-card:duo"),
+        ("0244", "liabilities:personal:shared-account"),
+    ),
 )
 
 
@@ -40,3 +45,32 @@ def test_is_configured_covers_personal_cards_and_the_shared_card() -> None:
 def test_a_shared_card_without_the_adjustment_account_is_rejected() -> None:
     with pytest.raises(ValidationError):
         AccountRoles(shared_card="liabilities:personal:shared-account")
+
+
+def test_card_last_digits_pick_the_source_account() -> None:
+    assert ROLES.source_account_for_card_digits("1111") == "liabilities:op:credit-card:gold"
+    assert ROLES.source_account_for_card_digits("0244") == "liabilities:personal:shared-account"
+
+
+def test_card_digits_are_normalized_to_the_last_four_digits() -> None:
+    assert ROLES.source_account_for_card_digits("**** 2222") == "liabilities:op:credit-card:duo"
+    assert (
+        ROLES.source_account_for_card_digits("MasterCard **** **** **** 2222")
+        == "liabilities:op:credit-card:duo"
+    )
+
+
+def test_unknown_or_missing_card_digits_have_no_account() -> None:
+    assert ROLES.source_account_for_card_digits("9999") is None
+    assert ROLES.source_account_for_card_digits(None) is None
+    assert ROLES.source_account_for_card_digits("") is None
+    assert AccountRoles().source_account_for_card_digits("1111") is None
+
+
+def test_card_last_digits_must_be_four_digits_mapped_to_an_account() -> None:
+    with pytest.raises(ValidationError):
+        AccountRoles(card_last_digits=(("123", "liabilities:op:credit-card:gold"),))
+    with pytest.raises(ValidationError):
+        AccountRoles(card_last_digits=(("abcd", "liabilities:op:credit-card:gold"),))
+    with pytest.raises(ValidationError):
+        AccountRoles(card_last_digits=(("1111", "  "),))

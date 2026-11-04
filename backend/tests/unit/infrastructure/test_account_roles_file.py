@@ -10,7 +10,11 @@ VALID = """
   "personalCards": ["liabilities:op:credit-card:gold", "liabilities:op:credit-card:duo"],
   "sharedCard": "liabilities:personal:shared-account",
   "flatmateExpenseAdjustment": "expenses:flatmate-expense-adjustment",
-  "purchaseForFlatmate": "expenses:purchase-for-flatmate"
+  "purchaseForFlatmate": "expenses:purchase-for-flatmate",
+  "cardLastDigits": {
+    "1111": "liabilities:op:credit-card:gold",
+    "0244": "liabilities:personal:shared-account"
+  }
 }
 """
 
@@ -61,4 +65,52 @@ def test_valid_file_loads_the_roles_once(tmp_path: Path) -> None:
     assert roles.purchase_for_flatmate == "expenses:purchase-for-flatmate"
     assert roles.role_of("liabilities:personal:shared-account") is AccountRole.SHARED_CARD
     assert roles.role_of("liabilities:op:credit-card:gold") is AccountRole.PERSONAL_CARD
+    assert roles.source_account_for_card_digits("1111") == "liabilities:op:credit-card:gold"
+    assert roles.source_account_for_card_digits("0244") == "liabilities:personal:shared-account"
+    assert roles.source_account_for_card_digits("9999") is None
     assert loader.load() is roles
+
+
+def test_card_last_digits_are_optional(tmp_path: Path) -> None:
+    path = write(
+        tmp_path,
+        """
+        {
+          "personalCards": ["liabilities:op:credit-card:gold"],
+          "sharedCard": "liabilities:personal:shared-account",
+          "flatmateExpenseAdjustment": "expenses:flatmate-expense-adjustment",
+          "purchaseForFlatmate": "expenses:purchase-for-flatmate"
+        }
+        """,
+    )
+
+    roles = AccountRolesFile(path).load()
+
+    assert roles.card_last_digits == ()
+    assert roles.source_account_for_card_digits("1111") is None
+
+
+def test_invalid_card_last_digits_entries_are_skipped_not_fatal(tmp_path: Path) -> None:
+    path = write(
+        tmp_path,
+        """
+        {
+          "personalCards": ["liabilities:op:credit-card:gold"],
+          "sharedCard": "liabilities:personal:shared-account",
+          "flatmateExpenseAdjustment": "expenses:flatmate-expense-adjustment",
+          "purchaseForFlatmate": "expenses:purchase-for-flatmate",
+          "cardLastDigits": {
+            "12": "liabilities:op:credit-card:duo",
+            "": "liabilities:op:credit-card:duo",
+            "1111": "liabilities:op:credit-card:gold"
+          }
+        }
+        """,
+    )
+
+    roles = AccountRolesFile(path).load()
+
+    assert roles.card_last_digits == (("1111", "liabilities:op:credit-card:gold"),)
+    assert roles.source_account_for_card_digits("1111") == "liabilities:op:credit-card:gold"
+    assert roles.source_account_for_card_digits("12") is None
+    assert roles.shared_card == "liabilities:personal:shared-account"

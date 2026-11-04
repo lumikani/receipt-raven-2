@@ -3,8 +3,13 @@
 Which account plays which role comes from configuration (ACCOUNT_ROLES_PATH),
 never from hardcoded account names. An empty AccountRoles — a missing or
 invalid config file — routes every source account as a personal card.
+
+The configuration also maps the card's last four digits (read from the
+receipt's `Kortti:` line) to the source account, so the card that paid picks
+the account — see `source_account_for_card_digits`.
 """
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -32,6 +37,8 @@ class AccountRoles(ValueObject):
     shared_card: str | None = None
     flatmate_expense_adjustment: str | None = None
     purchase_for_flatmate: str | None = None
+    # Card last-4 digits -> source account, e.g. (("9841", "liabilities:...:gold"),).
+    card_last_digits: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.shared_card is not None and self.flatmate_expense_adjustment is None:
@@ -39,6 +46,24 @@ class AccountRoles(ValueObject):
                 "A configured shared card needs the flatmate expense adjustment account",
                 field="flatmate_expense_adjustment",
             )
+        for digits, account in self.card_last_digits:
+            if re.fullmatch(r"\d{4}", digits) is None or not account.strip():
+                raise ValidationError(
+                    f"Invalid card last digits {digits!r}: expected four digits "
+                    "mapped to a source account",
+                    field="card_last_digits",
+                )
+
+    def source_account_for_card_digits(self, digits: str | None) -> str | None:
+        """The source account configured for these card digits, if any.
+
+        Only the digits matter: `Kortti: MasterCard **** **** **** 9841` and
+        `9841` both resolve to the account mapped to `9841`.
+        """
+        if not digits:
+            return None
+        key = re.sub(r"\D", "", digits)[-4:]
+        return next((account for d, account in self.card_last_digits if d == key), None)
 
     def role_of(self, source_account: str | None) -> AccountRole:
         """The role of a source account; unconfigured accounts are personal cards."""
