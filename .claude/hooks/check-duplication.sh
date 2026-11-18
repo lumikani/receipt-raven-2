@@ -89,8 +89,8 @@ if [[ -n "$report" ]]; then
   {
     printf '%s' "$report"
     echo "Extract the shared code into a helper both sides call. Never raise the"
-    echo "threshold to make the check pass: it is a ratchet (see CLAUDE.md >"
-    echo "Duplication). If the duplication is deliberate and extracting it would"
+    echo "threshold to make the check pass: it is a ratchet (see"
+    echo ".agents/docs/testing.md). If the duplication is deliberate and extracting it would"
     echo "make the code worse, say why and finish the turn."
   } >&2
   exit 2
